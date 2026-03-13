@@ -6,7 +6,7 @@ import math
 import json
 import os
 import glob
-from shapely.geometry import box as _shapely_box
+from shapely.geometry import box as _shapely_box, Point as _ShapelyPoint, Polygon as _ShapelyPolygon
 from shapely.affinity import rotate as _shapely_rotate, translate as _shapely_translate
 from shapely.ops import unary_union as _shapely_union
 import matplotlib
@@ -306,9 +306,201 @@ def draw_text_shape(dwg, p):
         ))
         return _text_shape_dict(p["text"], cx, cy, font_size, rotation, contours, stroke_width, fill_transparent)
 
+# --- Compound shape helpers ---
+
+def _build_weighted_subs(sub_profiles):
+    weighted = []
+    for sp in sub_profiles:
+        weighted.extend([sp] * sp.get("weight", 1))
+    return weighted
+
+def _scale_profile(p, scale):
+    p = dict(p)
+    for key in ("r_min", "r_max", "font_size_min", "font_size_max",
+                "radius_min", "radius_max", "arm_width_min", "arm_width_max"):
+        if key in p:
+            p[key] = max(1, int(p[key] * scale))
+    return p
+
+def _geometry_to_contours(geom):
+    contours = []
+    if geom.geom_type == 'Polygon':
+        if not geom.is_empty:
+            contours.append([list(c) for c in geom.exterior.coords[:-1]])
+            for interior in geom.interiors:
+                contours.append([list(c) for c in interior.coords[:-1]])
+    elif geom.geom_type in ('MultiPolygon', 'GeometryCollection'):
+        for g in geom.geoms:
+            contours.extend(_geometry_to_contours(g))
+    return contours
+
+def _contours_to_svg_path_d(contours):
+    return " ".join(
+        f"M {pts[0][0]:.2f},{pts[0][1]:.2f} " +
+        " ".join(f"L {pt[0]:.2f},{pt[1]:.2f}" for pt in pts[1:]) + " Z"
+        for pts in contours if pts
+    )
+
+def _profile_to_geometry(p, cx, cy):
+    """Compute shapely geometry for a profile at (cx, cy) without SVG drawing."""
+    shape = p["shape"]
+    if shape == "circle":
+        r = random.randint(p["r_min"], p["r_max"])
+        return _ShapelyPoint(cx, cy).buffer(r)
+    elif shape == "polygon":
+        r = random.randint(p["r_min"], p["r_max"])
+        sides = random.randint(p["sides_min"], p["sides_max"])
+        rotation = random.uniform(0, 2 * math.pi)
+        return _ShapelyPolygon(make_polygon_points(cx, cy, r, sides, rotation))
+    elif shape == "star":
+        r = random.randint(p["r_min"], p["r_max"])
+        inner_r = r * random.uniform(p["inner_r_ratio_min"], p["inner_r_ratio_max"])
+        sides = random.randint(p["sides_min"], p["sides_max"])
+        rotation = random.uniform(0, 2 * math.pi)
+        return _ShapelyPolygon(make_star_points(cx, cy, r, inner_r, sides, rotation))
+    elif shape == "cross":
+        r = random.randint(p["r_min"], p["r_max"])
+        arm_width = random.randint(p["arm_width_min"], p["arm_width_max"])
+        num_arms = random.randint(p["sides_min"], p["sides_max"])
+        return _ShapelyPolygon(make_cross_points(cx, cy, r, arm_width, num_arms))
+    elif shape == "text":
+        font_size = random.randint(p["font_size_min"], p["font_size_max"])
+        font_family = p.get("font_family", "DejaVu Sans")
+        rotation = random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 0))
+        contours = make_text_contours(p["text"], cx, cy, font_size, font_family)
+        if rotation != 0:
+            contours = rotate_contours(contours, cx, cy, rotation)
+        polys = [_ShapelyPolygon(c) for c in contours if len(c) >= 3]
+        if not polys:
+            return _ShapelyPolygon()
+        polys.sort(key=lambda poly: poly.area, reverse=True)
+        outer, holes = [], []
+        for poly in polys:
+            if any(op.contains(poly.centroid) for op in outer):
+                holes.append(poly)
+            else:
+                outer.append(poly)
+        result = _shapely_union(outer)
+        for h in holes:
+            result = result.difference(h)
+        return result
+    elif shape == "constellation":
+        return _constellation_geometry(p, cx, cy)
+    elif shape == "nest":
+        return _nest_geometry(p, cx, cy)
+    return _ShapelyPolygon()
+
+def _constellation_geometry(p, cx, cy):
+    radius = random.randint(p["radius_min"], p["radius_max"])
+    count = random.randint(p["count_min"], p["count_max"])
+    start_angle = random.uniform(0, 2 * math.pi)
+    weighted_subs = _build_weighted_subs(p["sub_profiles"])
+    geoms = []
+    for i in range(count):
+        angle = start_angle + (2 * math.pi * i / count)
+        geom = _profile_to_geometry(dict(random.choice(weighted_subs)),
+                                    cx + radius * math.cos(angle),
+                                    cy + radius * math.sin(angle))
+        if not geom.is_empty:
+            geoms.append(geom)
+    return _shapely_union(geoms) if geoms else _ShapelyPolygon()
+
+def _nest_geometry(p, cx, cy):
+    count = random.randint(p["count_min"], p["count_max"])
+    scale_factor = random.uniform(p["scale_factor_min"], p["scale_factor_max"])
+    sub_p = dict(random.choice(_build_weighted_subs(p["sub_profiles"])))
+    geoms = []
+    scale = 1.0
+    for _ in range(count):
+        geom = _profile_to_geometry(_scale_profile(sub_p, scale), cx, cy)
+        if not geom.is_empty:
+            geoms.append(geom)
+        scale *= scale_factor
+    return _shapely_union(geoms) if geoms else _ShapelyPolygon()
+
+def draw_constellation(dwg, p):
+    cx = random.randint(p["x_min"], p["x_max"])
+    cy = random.randint(p["y_min"], p["y_max"])
+    radius = random.randint(p["radius_min"], p["radius_max"])
+    count = random.randint(p["count_min"], p["count_max"])
+    start_angle = random.uniform(0, 2 * math.pi)
+    one_layer = p.get("one_layer", False)
+    fill_transparent = bool(p.get("fill_transparent"))
+    weighted_subs = _build_weighted_subs(p["sub_profiles"])
+
+    if one_layer:
+        stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
+        fill_color = "none" if fill_transparent else random_color(p, "fill")
+        geoms = []
+        for i in range(count):
+            angle = start_angle + (2 * math.pi * i / count)
+            geom = _profile_to_geometry(dict(random.choice(weighted_subs)),
+                                        cx + radius * math.cos(angle),
+                                        cy + radius * math.sin(angle))
+            if not geom.is_empty:
+                geoms.append(geom)
+        union = _shapely_union(geoms) if geoms else None
+        if union is None or union.is_empty:
+            return None
+        contours = _geometry_to_contours(union)
+        if not contours:
+            return None
+        dwg.add(dwg.path(
+            d=_contours_to_svg_path_d(contours),
+            fill=fill_color,
+            fill_rule="evenodd",
+            stroke=random_color(p, "stroke"),
+            stroke_width=stroke_width,
+        ))
+        result = {"type": "constellation", "cx": cx, "cy": cy,
+                  "contours": contours, "stroke_width": stroke_width}
+        if fill_transparent:
+            result["fill_transparent"] = True
+        return result
+    else:
+        results = []
+        for i in range(count):
+            angle = start_angle + (2 * math.pi * i / count)
+            sub_p = dict(random.choice(weighted_subs))
+            sub_p["x_min"] = sub_p["x_max"] = int(cx + radius * math.cos(angle))
+            sub_p["y_min"] = sub_p["y_max"] = int(cy + radius * math.sin(angle))
+            result = draw_shape(dwg, sub_p)
+            if result is None:
+                continue
+            if isinstance(result, list):
+                results.extend(result)
+            else:
+                results.append(result)
+        return results if results else None
+
+def draw_nest(dwg, p):
+    cx = random.randint(p["x_min"], p["x_max"])
+    cy = random.randint(p["y_min"], p["y_max"])
+    count = random.randint(p["count_min"], p["count_max"])
+    scale_factor = random.uniform(p["scale_factor_min"], p["scale_factor_max"])
+    sub_p_base = dict(random.choice(_build_weighted_subs(p["sub_profiles"])))
+    results = []
+    scale = 1.0
+    for _ in range(count):
+        scaled_p = _scale_profile(sub_p_base, scale)
+        scaled_p["x_min"] = scaled_p["x_max"] = cx
+        scaled_p["y_min"] = scaled_p["y_max"] = cy
+        result = draw_shape(dwg, scaled_p)
+        if result is not None:
+            if isinstance(result, list):
+                results.extend(result)
+            else:
+                results.append(result)
+        scale *= scale_factor
+    return results if results else None
+
 def draw_debug_label(dwg, shape_data, idx):
-    if shape_data["type"] in ("circle", "text"):
+    if shape_data["type"] in ("circle", "text", "constellation"):
         tx, ty = shape_data["cx"], shape_data["cy"]
+    elif "contours" in shape_data:
+        all_pts = [pt for contour in shape_data["contours"] for pt in contour]
+        tx = sum(pt[0] for pt in all_pts) / len(all_pts)
+        ty = sum(pt[1] for pt in all_pts) / len(all_pts)
     else:
         pts = shape_data["points"]
         tx = sum(pt[0] for pt in pts) / len(pts)
@@ -337,6 +529,10 @@ def draw_shape(dwg, p):
         return draw_cross(dwg, p)
     elif p["shape"] == "text":
         return draw_text_shape(dwg, p)
+    elif p["shape"] == "constellation":
+        return draw_constellation(dwg, p)
+    elif p["shape"] == "nest":
+        return draw_nest(dwg, p)
 
 
 def main():

@@ -1,6 +1,6 @@
 [
   {
-    "weight": 0,
+    "weight": 1,
     "shape": "polygon",
     "x_min": 300, "x_max": 500,
     "y_min": 300, "y_max": 500,

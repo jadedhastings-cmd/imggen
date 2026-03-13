@@ -1,0 +1,74 @@
+[
+  {
+    "weight": 1,
+    "shape": "constellation",
+    "one_layer": true,
+    "x_min": 300, "x_max": 500,
+    "y_min": 300, "y_max": 500,
+    "radius_min": 100, "radius_max": 180,
+    "count_min": 4, "count_max": 7,
+    "stroke_width_min": 5, "stroke_width_max": 12,
+    "stroke_r_min": 0, "stroke_r_max": 80,
+    "stroke_g_min": 0, "stroke_g_max": 80,
+    "stroke_b_min": 0, "stroke_b_max": 80,
+    "fill_r_min": 80, "fill_r_max": 200,
+    "fill_g_min": 80, "fill_g_max": 200,
+    "fill_b_min": 80, "fill_b_max": 200,
+    "sub_profiles": [
+      {
+        "weight": 1,
+        "shape": "circle",
+        "r_min": 20, "r_max": 50,
+        "fill_r_min": 100, "fill_r_max": 255,
+        "fill_g_min": 0, "fill_g_max": 100,
+        "fill_b_min": 0, "fill_b_max": 100,
+        "stroke_r_min": 0, "stroke_r_max": 60,
+        "stroke_g_min": 0, "stroke_g_max": 60,
+        "stroke_b_min": 0, "stroke_b_max": 60,
+        "stroke_width_min": 4, "stroke_width_max": 10
+      },
+      {
+        "weight": 1,
+        "shape": "star",
+        "r_min": 20, "r_max": 45,
+        "inner_r_ratio_min": 0.4, "inner_r_ratio_max": 0.6,
+        "sides_min": 5, "sides_max": 6,
+        "fill_r_min": 0, "fill_r_max": 100,
+        "fill_g_min": 100, "fill_g_max": 255,
+        "fill_b_min": 0, "fill_b_max": 100,
+        "stroke_r_min": 0, "stroke_r_max": 60,
+        "stroke_g_min": 0, "stroke_g_max": 60,
+        "stroke_b_min": 0, "stroke_b_max": 60,
+        "stroke_width_min": 3, "stroke_width_max": 8
+      }
+    ]
+  },
+  {
+    "weight": 1,
+    "shape": "constellation",
+    "one_layer": false,
+    "x_min": 200, "x_max": 600,
+    "y_min": 200, "y_max": 600,
+    "radius_min": 80, "radius_max": 150,
+    "count_min": 3, "count_max": 5,
+    "stroke_width_min": 0, "stroke_width_max": 0,
+    "fill_r_min": 0, "fill_r_max": 255,
+    "fill_g_min": 0, "fill_g_max": 255,
+    "fill_b_min": 0, "fill_b_max": 255,
+    "sub_profiles": [
+      {
+        "weight": 1,
+        "shape": "polygon",
+        "sides_min": 3, "sides_max": 6,
+        "r_min": 30, "r_max": 60,
+        "fill_r_min": 0, "fill_r_max": 150,
+        "fill_g_min": 0, "fill_g_max": 150,
+        "fill_b_min": 150, "fill_b_max": 255,
+        "stroke_r_min": 0, "stroke_r_max": 50,
+        "stroke_g_min": 0, "stroke_g_max": 50,
+        "stroke_b_min": 0, "stroke_b_max": 50,
+        "stroke_width_min": 5, "stroke_width_max": 12
+      }
+    ]
+  }
+]
