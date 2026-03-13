@@ -21,7 +21,7 @@ DEBUG_MODE = False
 NUM_FILES = 5
 
 #number of shapes to be generated
-NUM_SHAPES = 10
+NUM_SHAPES = 1
 
 #What to name the output files
 OUTPUT_NAME = "shapes"
@@ -86,6 +86,8 @@ def make_cross_points(cx, cy, r, arm_width, num_arms):
     return list(cross.exterior.coords[:-1])
 
 def random_color(p, prefix="fill"):
+    if f"{prefix}_r_min" not in p:
+        return "rgb(0,0,0)"
     return "rgb({},{},{})".format(
         random.randint(p[f"{prefix}_r_min"], p[f"{prefix}_r_max"]),
         random.randint(p[f"{prefix}_g_min"], p[f"{prefix}_g_max"]),
@@ -395,11 +397,20 @@ def _constellation_geometry(p, cx, cy):
     count = random.randint(p["count_min"], p["count_max"])
     start_angle = random.uniform(0, 2 * math.pi)
     weighted_subs = _build_weighted_subs(p["sub_profiles"])
+    uniform_size = p.get("uniform_size", False)
+    fixed_size = None
+    if uniform_size:
+        sample = dict(random.choice(weighted_subs))
+        r_key = "radius_min" if "radius_min" in sample else "r_min"
+        r_key_max = "radius_max" if "radius_max" in sample else "r_max"
+        fixed_size = (r_key, r_key_max, random.randint(sample[r_key], sample[r_key_max]))
     geoms = []
     for i in range(count):
         angle = start_angle + (2 * math.pi * i / count)
-        geom = _profile_to_geometry(dict(random.choice(weighted_subs)),
-                                    cx + radius * math.cos(angle),
+        sub_p = dict(random.choice(weighted_subs))
+        if fixed_size:
+            sub_p[fixed_size[0]] = sub_p[fixed_size[1]] = fixed_size[2]
+        geom = _profile_to_geometry(sub_p, cx + radius * math.cos(angle),
                                     cy + radius * math.sin(angle))
         if not geom.is_empty:
             geoms.append(geom)
@@ -443,14 +454,24 @@ def draw_constellation(dwg, p):
     fill_transparent = bool(p.get("fill_transparent"))
     weighted_subs = _build_weighted_subs(p["sub_profiles"])
 
+    uniform_size = p.get("uniform_size", False)
+    fixed_size = None
+    if uniform_size:
+        sample = dict(random.choice(weighted_subs))
+        r_key = "radius_min" if "radius_min" in sample else "r_min"
+        r_key_max = "radius_max" if "radius_max" in sample else "r_max"
+        fixed_size = (r_key, r_key_max, random.randint(sample[r_key], sample[r_key_max]))
+
     if one_layer:
         stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
         fill_color = "none" if fill_transparent else random_color(p, "fill")
         geoms = []
         for i in range(count):
             angle = start_angle + (2 * math.pi * i / count)
-            geom = _profile_to_geometry(dict(random.choice(weighted_subs)),
-                                        cx + radius * math.cos(angle),
+            sub_p = dict(random.choice(weighted_subs))
+            if fixed_size:
+                sub_p[fixed_size[0]] = sub_p[fixed_size[1]] = fixed_size[2]
+            geom = _profile_to_geometry(sub_p, cx + radius * math.cos(angle),
                                         cy + radius * math.sin(angle))
             if not geom.is_empty:
                 geoms.append(geom)
@@ -477,6 +498,8 @@ def draw_constellation(dwg, p):
         for i in range(count):
             angle = start_angle + (2 * math.pi * i / count)
             sub_p = dict(random.choice(weighted_subs))
+            if fixed_size:
+                sub_p[fixed_size[0]] = sub_p[fixed_size[1]] = fixed_size[2]
             sub_p["x_min"] = sub_p["x_max"] = int(cx + radius * math.cos(angle))
             sub_p["y_min"] = sub_p["y_max"] = int(cy + radius * math.sin(angle))
             result = draw_shape(dwg, sub_p)

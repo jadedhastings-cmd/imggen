@@ -365,7 +365,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", type=str, default=FILE_TO_PREP)
     parser.add_argument("--app", type=str, default=APPELLATION)
-    parser.add_argument("--taper", type=int, default=TAPER_PX)
+    parser.add_argument("--taper", type=float, default=TAPER_PX)
     args = parser.parse_args()
 
     canvas_size, shapes, base_name = load_shapes(args.file)
