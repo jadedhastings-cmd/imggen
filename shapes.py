@@ -21,7 +21,7 @@ DEBUG_MODE = False
 NUM_FILES = 5
 
 #number of shapes to be generated
-NUM_SHAPES = 1
+NUM_SHAPES = 10
 
 #What to name the output files
 OUTPUT_NAME = "shapes"
@@ -484,7 +484,6 @@ def draw_constellation(dwg, p):
 
     if one_layer:
         stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
-        fill_color = "none" if fill_transparent else random_color(p, "fill")
         geoms = []
         for i in range(count):
             angle = start_angle + (2 * math.pi * i / count)
@@ -498,16 +497,9 @@ def draw_constellation(dwg, p):
         union = _shapely_union(geoms) if geoms else None
         if union is None or union.is_empty:
             return None
-        contours = _geometry_to_contours(union)
+        contours = _add_contour_paths(dwg, union, stroke_width, fill_transparent, p)
         if not contours:
             return None
-        dwg.add(dwg.path(
-            d=_contours_to_svg_path_d(contours),
-            fill=fill_color,
-            fill_rule="evenodd",
-            stroke=random_color(p, "stroke"),
-            stroke_width=stroke_width,
-        ))
         result = {"type": "constellation", "cx": cx, "cy": cy,
                   "contours": contours, "stroke_width": stroke_width}
         if fill_transparent:
@@ -587,6 +579,35 @@ def draw_debug_label(dwg, shape_data, idx):
         text_anchor="middle",
         dominant_baseline="central",
     ))
+
+def _add_contour_paths(dwg, geom, stroke_width, fill_transparent, p):
+    """Draw a Shapely geometry as explicit filled SVG paths.
+    Fill drawn as one path, stroke rendered as a Shapely buffer ring (separate filled path).
+    Returns contours list, or None if geometry is empty.
+    """
+    contours = _geometry_to_contours(geom)
+    if not contours:
+        return None
+    if not fill_transparent:
+        dwg.add(dwg.path(
+            d=_contours_to_svg_path_d(contours),
+            fill=random_color(p, "fill"),
+            fill_rule="evenodd",
+            stroke="none",
+        ))
+    if stroke_width > 0:
+        ring = geom.buffer(stroke_width / 2).difference(geom.buffer(-stroke_width / 2))
+        if not ring.is_empty:
+            ring_contours = _geometry_to_contours(ring)
+            if ring_contours:
+                dwg.add(dwg.path(
+                    d=_contours_to_svg_path_d(ring_contours),
+                    fill=random_color(p, "stroke"),
+                    fill_rule="evenodd",
+                    stroke="none",
+                ))
+    return contours
+
 
 def _make_bumped_polygon(cx, cy, r, sides, rotation_deg, bump_mode, bump_ratio):
     """Polygon with circular arc bumps on each edge.
@@ -680,18 +701,9 @@ def draw_bumped_polygon(dwg, p):
     geom = _make_bumped_polygon(cx, cy, r, sides, rotation, bump_mode, bump_ratio)
     if geom.is_empty:
         return None
-    contours = _geometry_to_contours(geom)
+    contours = _add_contour_paths(dwg, geom, stroke_width, fill_transparent, p)
     if not contours:
         return None
-
-    fill_color = "none" if fill_transparent else random_color(p, "fill")
-    dwg.add(dwg.path(
-        d=_contours_to_svg_path_d(contours),
-        fill=fill_color,
-        fill_rule="evenodd",
-        stroke=random_color(p, "stroke"),
-        stroke_width=stroke_width,
-    ))
     result = {"type": "bumped_polygon", "cx": cx, "cy": cy,
               "contours": contours, "stroke_width": stroke_width}
     if fill_transparent:
@@ -723,17 +735,9 @@ def draw_daisy(dwg, p):
         union = _shapely_union(geoms) if geoms else None
         if union is None or union.is_empty:
             return None
-        contours = _geometry_to_contours(union)
+        contours = _add_contour_paths(dwg, union, stroke_width, fill_transparent, p)
         if not contours:
             return None
-        fill_color = "none" if fill_transparent else random_color(p, "fill")
-        dwg.add(dwg.path(
-            d=_contours_to_svg_path_d(contours),
-            fill=fill_color,
-            fill_rule="evenodd",
-            stroke=random_color(p, "stroke"),
-            stroke_width=stroke_width,
-        ))
         result = {"type": "daisy", "cx": cx, "cy": cy,
                   "contours": contours, "stroke_width": stroke_width}
         if fill_transparent:
@@ -746,17 +750,9 @@ def draw_daisy(dwg, p):
             geom = _place_petal(petal_local, cx, cy, arm_r, angle, point_inward)
             if geom.is_empty:
                 continue
-            contours = _geometry_to_contours(geom)
+            contours = _add_contour_paths(dwg, geom, stroke_width, fill_transparent, p)
             if not contours:
                 continue
-            fill_color = "none" if fill_transparent else random_color(p, "fill")
-            dwg.add(dwg.path(
-                d=_contours_to_svg_path_d(contours),
-                fill=fill_color,
-                fill_rule="evenodd",
-                stroke=random_color(p, "stroke"),
-                stroke_width=stroke_width,
-            ))
             petal_cx = cx + arm_r * math.cos(angle)
             petal_cy = cy + arm_r * math.sin(angle)
             result = {"type": "petal", "cx": petal_cx, "cy": petal_cy,
