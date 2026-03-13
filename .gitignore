@@ -2,5 +2,5 @@
 output/
 *.png
 *.svg
-*.json
+output/**/*.json
 __pycache__/

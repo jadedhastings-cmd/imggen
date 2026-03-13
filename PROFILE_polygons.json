@@ -1,0 +1,17 @@
+[
+  {
+    "weight": 0,
+    "shape": "polygon",
+    "x_min": 300, "x_max": 500,
+    "y_min": 300, "y_max": 500,
+    "r_min": 40, "r_max": 220,
+    "sides_min": 3, "sides_max": 10,
+    "fill_r_min": 0, "fill_r_max": 255,
+    "fill_g_min": 0, "fill_g_max": 255,
+    "fill_b_min": 0, "fill_b_max": 255,
+    "stroke_r_min": 0, "stroke_r_max": 255,
+    "stroke_g_min": 0, "stroke_g_max": 255,
+    "stroke_b_min": 0, "stroke_b_max": 255,
+    "stroke_width_min": 10, "stroke_width_max": 20
+  }
+]

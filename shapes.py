@@ -7,7 +7,7 @@ import json
 import os
 import glob
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 #Number of outputs
 NUM_FILES = 5
@@ -19,52 +19,24 @@ NUM_SHAPES = 10
 OUTPUT_NAME = "shapes"
 
 # Canvas size
-CANVAS_SIZE = (800, 800)
+CANVAS_WIDTH_IN = 8
+CANVAS_HEIGHT_IN = 8
+RESOLUTION = 100  # pixels per inch
 
-# Profiles
-PROFILES = [{
-        "weight": 1,
-        "shape": "circle",
-        "x_min": 200, "x_max": 600,
-        "y_min": 200, "y_max": 600,
-        "r_min": 50, "r_max": 100,
-        "fill_r_min": 0, "fill_r_max": 255,
-        "fill_g_min": 0, "fill_g_max": 255,
-        "fill_b_min": 0, "fill_b_max": 255,
-        "stroke_r_min": 0, "stroke_r_max": 255,
-        "stroke_g_min": 0, "stroke_g_max": 255,
-        "stroke_b_min": 0, "stroke_b_max": 255,
-        "stroke_width_min": 10, "stroke_width_max":20
-    },
-    {
-        "weight": 1,
-        "shape": "circle",
-        "x_min": 300, "x_max": 500,
-        "y_min": 300, "y_max": 500,
-        "r_min": 100, "r_max": 200,
-        "fill_r_min": 0, "fill_r_max": 255,
-        "fill_g_min": 0, "fill_g_max": 255,
-        "fill_b_min": 0, "fill_b_max": 255,
-        "stroke_r_min": 0, "stroke_r_max": 255,
-        "stroke_g_min": 0, "stroke_g_max": 255,
-        "stroke_b_min": 0, "stroke_b_max": 255,
-        "stroke_width_min": 10, "stroke_width_max":50
-    },
-    {
-        "weight": 0,
-        "shape": "polygon",
-        "x_min": 300, "x_max": 500,
-        "y_min": 300, "y_max": 500,
-        "r_min": 40, "r_max": 220,
-        "sides_min": 3, "sides_max": 10,
-        "fill_r_min": 0, "fill_r_max": 255,
-        "fill_g_min": 0, "fill_g_max": 255,
-        "fill_b_min": 0, "fill_b_max": 255,
-        "stroke_r_min": 0, "stroke_r_max": 255,
-        "stroke_g_min": 0, "stroke_g_max": 255,
-        "stroke_b_min": 0, "stroke_b_max": 255,
-        "stroke_width_min": 10, "stroke_width_max":20
-    },]  # same as before
+CANVAS_SIZE = (CANVAS_WIDTH_IN * RESOLUTION, CANVAS_HEIGHT_IN * RESOLUTION)
+
+# Profiles — loaded from PROFILE_*.json files in the same directory
+PROFILES = []
+for _profile_file in sorted(glob.glob("PROFILE_*.json")):
+    with open(_profile_file) as _f:
+        _data = json.load(_f)
+        if isinstance(_data, list):
+            PROFILES.extend(_data)
+        else:
+            PROFILES.append(_data)
+
+if not PROFILES:
+    raise RuntimeError("No profiles loaded. Add at least one PROFILE_*.json file.")
 
 
 def export_json(shapes, filename):
@@ -176,19 +148,24 @@ def main():
     for profile in PROFILES:
         weighted_profiles.extend([profile] * profile["weight"])
 
-    # Find the highest existing file number to avoid overwriting
-    existing = glob.glob(f"{OUTPUT_NAME}*.json")
+    # Find the highest existing output subfolder number to avoid overwriting
+    os.makedirs("output", exist_ok=True)
+    existing_dirs = glob.glob(f"output/{OUTPUT_NAME}*/")
     existing_nums = []
-    for f in existing:
-        stem = os.path.splitext(os.path.basename(f))[0]
-        suffix = stem[len(OUTPUT_NAME):]
+    for d in existing_dirs:
+        name = os.path.basename(os.path.normpath(d))
+        suffix = name[len(OUTPUT_NAME):]
         if suffix.isdigit():
             existing_nums.append(int(suffix))
     start = max(existing_nums) + 1 if existing_nums else 1
 
     # SVG
     for i in range(start, start + NUM_FILES):
-        dwg = svgwrite.Drawing(f"{OUTPUT_NAME}{i}.svg", size=CANVAS_SIZE)
+        name = f"{OUTPUT_NAME}{i}"
+        out_dir = f"output/{name}"
+        os.makedirs(out_dir, exist_ok=True)
+
+        dwg = svgwrite.Drawing(f"{out_dir}/{name}.svg", size=CANVAS_SIZE)
         shapes = []
 
         for idx in range(num_shapes):
@@ -201,7 +178,7 @@ def main():
                 draw_debug_label(dwg, shape_data, idx)
 
         dwg.save()
-        cairosvg.svg2png(url=f"{OUTPUT_NAME}{i}.svg", write_to=f"{OUTPUT_NAME}{i}.png", background_color="white")
-        export_json(shapes, f"{OUTPUT_NAME}{i}.json")
+        cairosvg.svg2png(url=f"{out_dir}/{name}.svg", write_to=f"output/{name}.png", background_color="white")
+        export_json(shapes, f"{out_dir}/{name}.json")
 
 main()
