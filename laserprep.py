@@ -10,6 +10,7 @@ import cairosvg
 
 FILE_TO_PREP = "shapes1.json"
 APPELLATION = "laser"
+TAPER_PX = 2  # pixels shrunk per side per layer above the base
 
 
 # --- Load input data ---
@@ -200,6 +201,28 @@ def build_layers(orders, geometries, rings, canvas):
     return layers
 
 
+# --- Tapering ---
+
+def apply_taper(layers, canvas_size, taper_px):
+    """Shrink each layer's geometry inward by taper_px per side per step above the base.
+    The base layer (last) is full size. Each layer above loses taper_px pixels per side.
+    """
+    if taper_px == 0:
+        return layers
+    w, h = canvas_size
+    n = len(layers)
+    tapered = []
+    for i, (geom, lord, is_ring) in enumerate(layers):
+        depth_from_base = n - 1 - i  # base=0, window/shallowest=n-1
+        shrink = depth_from_base * taper_px
+        if shrink == 0:
+            tapered.append((geom, lord, is_ring))
+        else:
+            clip = box(shrink, shrink, w - shrink, h - shrink)
+            tapered.append((geom.intersection(clip), lord, is_ring))
+    return tapered
+
+
 # --- SVG/PNG output ---
 
 def save_layer_svg(geometry, canvas_size, filename):
@@ -302,18 +325,20 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", type=str, default=FILE_TO_PREP)
     parser.add_argument("--app", type=str, default=APPELLATION)
+    parser.add_argument("--taper", type=int, default=TAPER_PX)
     args = parser.parse_args()
 
     canvas_size, shapes, base_name = load_shapes(args.file)
     canvas = box(0, 0, canvas_size[0], canvas_size[1])
 
-    output_dir = base_name
+    output_dir = os.path.join("output", f"{base_name}_layers")
     os.makedirs(output_dir, exist_ok=True)
 
     geometries, rings = build_geometries(shapes)
     visible_indices, visible_areas = filter_visible(shapes, geometries, rings)
     orders = compute_ordering(visible_indices, visible_areas, geometries, rings)
     layers = build_layers(orders, geometries, rings, canvas)
+    layers = apply_taper(layers, canvas_size, args.taper)
 
     save_preview_png(shapes, canvas_size, f"{base_name}_{args.app}_preview.png", visible_indices, orders, output_dir)
     save_all_layers(layers, canvas_size, base_name, args.app, output_dir)
