@@ -6,9 +6,10 @@ import math
 import json
 import os
 import glob
-from shapely.geometry import box as _shapely_box, Point as _ShapelyPoint, Polygon as _ShapelyPolygon, MultiPoint as _ShapelyMultiPoint
+from shapely.geometry import box as _shapely_box, Point as _ShapelyPoint, Polygon as _ShapelyPolygon, MultiPoint as _ShapelyMultiPoint, MultiPolygon as _ShapelyMultiPolygon
 from shapely.affinity import rotate as _shapely_rotate, translate as _shapely_translate
 from shapely.ops import unary_union as _shapely_union
+from shapely.validation import make_valid as _shapely_make_valid
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib.textpath import TextPath
@@ -21,7 +22,7 @@ DEBUG_MODE = False
 NUM_FILES = 5
 
 #number of shapes to be generated
-NUM_SHAPES = 10
+NUM_SHAPES = 1
 
 #What to name the output files
 OUTPUT_NAME = "shapes"
@@ -582,21 +583,15 @@ def draw_debug_label(dwg, shape_data, idx):
 
 def _add_contour_paths(dwg, geom, stroke_width, fill_transparent, p):
     """Draw a Shapely geometry as explicit filled SVG paths.
-    Fill drawn as one path, stroke rendered as a Shapely buffer ring (separate filled path).
+    Stroke rendered by drawing outer buffer in stroke color first, then fill on top.
+    This avoids buffer(-sw/2) which causes ghost edges on concave shapes.
     Returns contours list, or None if geometry is empty.
     """
     contours = _geometry_to_contours(geom)
     if not contours:
         return None
-    if not fill_transparent:
-        dwg.add(dwg.path(
-            d=_contours_to_svg_path_d(contours),
-            fill=random_color(p, "fill"),
-            fill_rule="evenodd",
-            stroke="none",
-        ))
     if stroke_width > 0:
-        ring = geom.buffer(stroke_width / 2).difference(geom.buffer(-stroke_width / 2))
+        ring = geom.boundary.buffer(stroke_width / 2)
         if not ring.is_empty:
             ring_contours = _geometry_to_contours(ring)
             if ring_contours:
@@ -606,6 +601,13 @@ def _add_contour_paths(dwg, geom, stroke_width, fill_transparent, p):
                     fill_rule="evenodd",
                     stroke="none",
                 ))
+    if not fill_transparent:
+        dwg.add(dwg.path(
+            d=_contours_to_svg_path_d(contours),
+            fill=random_color(p, "fill"),
+            fill_rule="nonzero",
+            stroke="none",
+        ))
     return contours
 
 
@@ -662,7 +664,7 @@ def _make_bumped_polygon(cx, cy, r, sides, rotation_deg, bump_mode, bump_ratio):
         cap = disk.intersection(hp)
         result = result.union(cap) if h > 0 else result.difference(cap)
 
-    return result
+    return result.buffer(0)
 
 
 def _make_petal(petal_r, length_ratio):

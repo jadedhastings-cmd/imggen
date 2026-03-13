@@ -15,7 +15,7 @@
     "stroke_r_min": 0, "stroke_r_max": 80,
     "stroke_g_min": 0, "stroke_g_max": 80,
     "stroke_b_min": 0, "stroke_b_max": 80,
-    "stroke_width_min": 5, "stroke_width_max": 12
+    "stroke_width_min": 5, "stroke_width_max": 10
   },
   {
     "weight": 1,
@@ -33,6 +33,6 @@
     "stroke_r_min": 0, "stroke_r_max": 80,
     "stroke_g_min": 0, "stroke_g_max": 80,
     "stroke_b_min": 0, "stroke_b_max": 80,
-    "stroke_width_min": 5, "stroke_width_max": 12
+    "stroke_width_min": 5, "stroke_width_max": 20
   }
 ]
