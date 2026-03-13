@@ -6,7 +6,7 @@ import math
 import json
 import os
 import glob
-from shapely.geometry import box as _shapely_box, Point as _ShapelyPoint, Polygon as _ShapelyPolygon
+from shapely.geometry import box as _shapely_box, Point as _ShapelyPoint, Polygon as _ShapelyPolygon, MultiPoint as _ShapelyMultiPoint
 from shapely.affinity import rotate as _shapely_rotate, translate as _shapely_translate
 from shapely.ops import unary_union as _shapely_union
 import matplotlib
@@ -390,6 +390,26 @@ def _profile_to_geometry(p, cx, cy):
         return _constellation_geometry(p, cx, cy)
     elif shape == "nest":
         return _nest_geometry(p, cx, cy)
+    elif shape == "bumped_polygon":
+        r = random.randint(p["r_min"], p["r_max"])
+        sides = random.randint(p["sides_min"], p["sides_max"])
+        rotation = random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 360))
+        bump_mode = p.get("bump_mode", "all_out")
+        bump_ratio = random.uniform(p["bump_ratio_min"], p["bump_ratio_max"])
+        return _make_bumped_polygon(cx, cy, r, sides, rotation, bump_mode, bump_ratio)
+    elif shape == "daisy":
+        count = random.randint(p["count_min"], p["count_max"])
+        arm_r = random.randint(p["radius_min"], p["radius_max"])
+        petal_r = random.randint(p["petal_r_min"], p["petal_r_max"])
+        length_ratio = random.uniform(p["petal_length_ratio_min"], p["petal_length_ratio_max"])
+        point_inward = p.get("point_inward", True)
+        start_angle = random.uniform(0, 2 * math.pi)
+        petal_local = _make_petal(petal_r, length_ratio)
+        geoms = [_place_petal(petal_local, cx, cy, arm_r,
+                              start_angle + 2*math.pi*i/count, point_inward)
+                 for i in range(count)]
+        geoms = [g for g in geoms if not g.is_empty]
+        return _shapely_union(geoms) if geoms else _ShapelyPolygon()
     return _ShapelyPolygon()
 
 def _constellation_geometry(p, cx, cy):
@@ -568,6 +588,185 @@ def draw_debug_label(dwg, shape_data, idx):
         dominant_baseline="central",
     ))
 
+def _make_bumped_polygon(cx, cy, r, sides, rotation_deg, bump_mode, bump_ratio):
+    """Polygon with circular arc bumps on each edge.
+    bump_ratio: arc sagitta as fraction of edge length (0.5 = semicircle).
+    bump_mode: 'all_out', 'all_in', 'alternate', 'random'.
+    """
+    rot = math.radians(rotation_deg)
+    verts = [(cx + r * math.cos(rot + 2*math.pi*i/sides),
+              cy + r * math.sin(rot + 2*math.pi*i/sides))
+             for i in range(sides)]
+    result = _ShapelyPolygon(verts)
+    first_outward = random.choice([True, False])
+    FAR = r * 20 + 1000
+
+    for i in range(sides):
+        A = verts[i]
+        B = verts[(i+1) % sides]
+        if bump_mode == "all_out":
+            outward = True
+        elif bump_mode == "all_in":
+            outward = False
+        elif bump_mode == "alternate":
+            outward = (i % 2 == 0) == first_outward
+        else:
+            outward = random.choice([True, False])
+
+        mx, my = (A[0]+B[0])/2, (A[1]+B[1])/2
+        edge_len = math.hypot(B[0]-A[0], B[1]-A[1])
+        half_chord = edge_len / 2
+        dx, dy = B[0]-A[0], B[1]-A[1]
+        norm_len = math.hypot(dx, dy)
+        edx, edy = dx/norm_len, dy/norm_len
+        nx, ny = -edy, edx
+        if (mx - cx)*nx + (my - cy)*ny < 0:
+            nx, ny = -nx, -ny
+
+        h = bump_ratio * edge_len * (1 if outward else -1)
+        if abs(h) < 1e-6:
+            continue
+
+        k = (h**2 - half_chord**2) / (2*h)
+        arc_r = math.sqrt(half_chord**2 + k**2)
+        arc_cx, arc_cy = mx + k*nx, my + k*ny
+        disk = _ShapelyPoint(arc_cx, arc_cy).buffer(arc_r)
+
+        apex_nx, apex_ny = (nx, ny) if h > 0 else (-nx, -ny)
+        hp = _ShapelyPolygon([
+            A, B,
+            (B[0] + FAR*edx + FAR*apex_nx, B[1] + FAR*edy + FAR*apex_ny),
+            (A[0] - FAR*edx + FAR*apex_nx, A[1] - FAR*edy + FAR*apex_ny),
+        ])
+        cap = disk.intersection(hp)
+        result = result.union(cap) if h > 0 else result.difference(cap)
+
+    return result
+
+
+def _make_petal(petal_r, length_ratio):
+    """Teardrop petal in local coords: tip at origin, round end in +y direction."""
+    petal_length = 2 * petal_r * length_ratio
+    circle_pts = [(petal_r * math.cos(2*math.pi*i/48),
+                   petal_length + petal_r * math.sin(2*math.pi*i/48))
+                  for i in range(48)]
+    return _ShapelyMultiPoint([(0.0, 0.0)] + circle_pts).convex_hull
+
+
+def _place_petal(petal_geom, cx, cy, arm_r, arm_angle_rad, point_inward):
+    """Rotate and translate petal so its tip sits at arm_r from (cx,cy).
+    point_inward=True: tip faces center, round end faces out.
+    point_inward=False: round end faces center, tip faces out.
+    """
+    arm_deg = math.degrees(arm_angle_rad)
+    rotation = (arm_deg - 90) if point_inward else (arm_deg + 90)
+    rotated = _shapely_rotate(petal_geom, rotation, origin=(0, 0))
+    tip_x = cx + arm_r * math.cos(arm_angle_rad)
+    tip_y = cy + arm_r * math.sin(arm_angle_rad)
+    return _shapely_translate(rotated, tip_x, tip_y)
+
+
+def draw_bumped_polygon(dwg, p):
+    cx = random.randint(p["x_min"], p["x_max"])
+    cy = random.randint(p["y_min"], p["y_max"])
+    r = random.randint(p["r_min"], p["r_max"])
+    sides = random.randint(p["sides_min"], p["sides_max"])
+    rotation = random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 360))
+    bump_mode = p.get("bump_mode", "all_out")
+    bump_ratio = random.uniform(p["bump_ratio_min"], p["bump_ratio_max"])
+    stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
+    fill_transparent = bool(p.get("fill_transparent"))
+
+    geom = _make_bumped_polygon(cx, cy, r, sides, rotation, bump_mode, bump_ratio)
+    if geom.is_empty:
+        return None
+    contours = _geometry_to_contours(geom)
+    if not contours:
+        return None
+
+    fill_color = "none" if fill_transparent else random_color(p, "fill")
+    dwg.add(dwg.path(
+        d=_contours_to_svg_path_d(contours),
+        fill=fill_color,
+        fill_rule="evenodd",
+        stroke=random_color(p, "stroke"),
+        stroke_width=stroke_width,
+    ))
+    result = {"type": "bumped_polygon", "cx": cx, "cy": cy,
+              "contours": contours, "stroke_width": stroke_width}
+    if fill_transparent:
+        result["fill_transparent"] = True
+    return result
+
+
+def draw_daisy(dwg, p):
+    cx = random.randint(p["x_min"], p["x_max"])
+    cy = random.randint(p["y_min"], p["y_max"])
+    count = random.randint(p["count_min"], p["count_max"])
+    arm_r = random.randint(p["radius_min"], p["radius_max"])
+    petal_r = random.randint(p["petal_r_min"], p["petal_r_max"])
+    length_ratio = random.uniform(p["petal_length_ratio_min"], p["petal_length_ratio_max"])
+    point_inward = p.get("point_inward", True)
+    one_layer = p.get("one_layer", False)
+    fill_transparent = bool(p.get("fill_transparent"))
+    stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
+    start_angle = random.uniform(0, 2 * math.pi)
+    petal_local = _make_petal(petal_r, length_ratio)
+
+    if one_layer:
+        geoms = []
+        for i in range(count):
+            angle = start_angle + 2*math.pi*i/count
+            geom = _place_petal(petal_local, cx, cy, arm_r, angle, point_inward)
+            if not geom.is_empty:
+                geoms.append(geom)
+        union = _shapely_union(geoms) if geoms else None
+        if union is None or union.is_empty:
+            return None
+        contours = _geometry_to_contours(union)
+        if not contours:
+            return None
+        fill_color = "none" if fill_transparent else random_color(p, "fill")
+        dwg.add(dwg.path(
+            d=_contours_to_svg_path_d(contours),
+            fill=fill_color,
+            fill_rule="evenodd",
+            stroke=random_color(p, "stroke"),
+            stroke_width=stroke_width,
+        ))
+        result = {"type": "daisy", "cx": cx, "cy": cy,
+                  "contours": contours, "stroke_width": stroke_width}
+        if fill_transparent:
+            result["fill_transparent"] = True
+        return result
+    else:
+        results = []
+        for i in range(count):
+            angle = start_angle + 2*math.pi*i/count
+            geom = _place_petal(petal_local, cx, cy, arm_r, angle, point_inward)
+            if geom.is_empty:
+                continue
+            contours = _geometry_to_contours(geom)
+            if not contours:
+                continue
+            fill_color = "none" if fill_transparent else random_color(p, "fill")
+            dwg.add(dwg.path(
+                d=_contours_to_svg_path_d(contours),
+                fill=fill_color,
+                fill_rule="evenodd",
+                stroke=random_color(p, "stroke"),
+                stroke_width=stroke_width,
+            ))
+            petal_cx = cx + arm_r * math.cos(angle)
+            petal_cy = cy + arm_r * math.sin(angle)
+            result = {"type": "petal", "cx": petal_cx, "cy": petal_cy,
+                      "contours": contours, "stroke_width": stroke_width}
+            if fill_transparent:
+                result["fill_transparent"] = True
+            results.append(result)
+        return results if results else None
+
+
 def draw_shape(dwg, p):
     # routes to the right function based on p["shape"]
     if p["shape"] == "circle":
@@ -585,6 +784,10 @@ def draw_shape(dwg, p):
         return draw_constellation(dwg, p)
     elif p["shape"] == "nest":
         return draw_nest(dwg, p)
+    elif p["shape"] == "bumped_polygon":
+        return draw_bumped_polygon(dwg, p)
+    elif p["shape"] == "daisy":
+        return draw_daisy(dwg, p)
 
 
 def main():

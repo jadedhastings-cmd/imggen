@@ -1,0 +1,38 @@
+[
+  {
+    "weight": 1,
+    "shape": "bumped_polygon",
+    "x_min": 200, "x_max": 600,
+    "y_min": 200, "y_max": 600,
+    "r_min": 80, "r_max": 180,
+    "sides_min": 4, "sides_max": 8,
+    "rotation_min": 0, "rotation_max": 360,
+    "bump_mode": "all_out",
+    "bump_ratio_min": 0.3, "bump_ratio_max": 0.6,
+    "fill_r_min": 50, "fill_r_max": 200,
+    "fill_g_min": 50, "fill_g_max": 200,
+    "fill_b_min": 50, "fill_b_max": 200,
+    "stroke_r_min": 0, "stroke_r_max": 80,
+    "stroke_g_min": 0, "stroke_g_max": 80,
+    "stroke_b_min": 0, "stroke_b_max": 80,
+    "stroke_width_min": 5, "stroke_width_max": 12
+  },
+  {
+    "weight": 1,
+    "shape": "bumped_polygon",
+    "x_min": 200, "x_max": 600,
+    "y_min": 200, "y_max": 600,
+    "r_min": 80, "r_max": 180,
+    "sides_min": 4, "sides_max": 8,
+    "rotation_min": 0, "rotation_max": 360,
+    "bump_mode": "alternate",
+    "bump_ratio_min": 0.3, "bump_ratio_max": 0.5,
+    "fill_r_min": 50, "fill_r_max": 200,
+    "fill_g_min": 50, "fill_g_max": 200,
+    "fill_b_min": 50, "fill_b_max": 200,
+    "stroke_r_min": 0, "stroke_r_max": 80,
+    "stroke_g_min": 0, "stroke_g_max": 80,
+    "stroke_b_min": 0, "stroke_b_max": 80,
+    "stroke_width_min": 5, "stroke_width_max": 12
+  }
+]

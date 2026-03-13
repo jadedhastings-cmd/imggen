@@ -37,7 +37,7 @@ def to_shapely(shape):
         base_fill = Point(shape["cx"], shape["cy"]).buffer(shape["r"])
     elif shape["type"] in ("polygon", "star", "cross"):
         base_fill = Polygon(shape["points"])
-    elif shape["type"] in ("text", "constellation"):
+    elif shape["type"] in ("text", "constellation", "bumped_polygon", "daisy", "petal"):
         polys = []
         for c in shape["contours"]:
             if len(c) >= 3:
@@ -314,7 +314,7 @@ def save_preview_png(shapes, canvas_size, filename, visible_indices, orders, out
                 stroke_width=sw,
             ))
             label_x, label_y = shape["cx"], shape["cy"]
-        elif shape["type"] in ("text", "constellation"):
+        elif shape["type"] in ("text", "constellation", "bumped_polygon", "daisy", "petal"):
             path_d = " ".join(
                 f"M {pts[0][0]:.2f},{pts[0][1]:.2f} " +
                 " ".join(f"L {pt[0]:.2f},{pt[1]:.2f}" for pt in pts[1:]) + " Z"
