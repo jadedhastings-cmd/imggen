@@ -9,6 +9,11 @@ import glob
 from shapely.geometry import box as _shapely_box
 from shapely.affinity import rotate as _shapely_rotate, translate as _shapely_translate
 from shapely.ops import unary_union as _shapely_union
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib.textpath import TextPath
+from matplotlib.font_manager import FontProperties
+import numpy as np
 
 DEBUG_MODE = False
 
@@ -167,8 +172,142 @@ def draw_cross(dwg, p):
         result["fill_transparent"] = True
     return result
 
+def _make_font_props(font_family):
+    if os.path.isfile(font_family):
+        return FontProperties(fname=font_family)
+    return FontProperties(family=font_family, weight='bold')
+
+def _center_and_flip(raw_polys, cx, cy):
+    """Flip y axis and center the polygon group at (cx, cy)."""
+    all_pts = np.vstack(raw_polys)
+    bbox_cx = (all_pts[:, 0].min() + all_pts[:, 0].max()) / 2
+    bbox_cy = (all_pts[:, 1].min() + all_pts[:, 1].max()) / 2
+    return [
+        [(float(pt[0] - bbox_cx + cx), float(-(pt[1] - bbox_cy) + cy)) for pt in poly]
+        for poly in raw_polys
+    ]
+
+def make_text_contours(text, cx, cy, font_size, font_family="DejaVu Sans"):
+    fp = _make_font_props(font_family)
+    tp = TextPath((0, 0), text, size=font_size, prop=fp)
+    raw_polys = tp.to_polygons()
+    if not raw_polys:
+        return []
+    return _center_and_flip(raw_polys, cx, cy)
+
+def make_letter_contours(text, cx, cy, font_size, font_family="DejaVu Sans", letter_spacing=0.08):
+    """Returns list of (char, contours) tuples, one per non-space character,
+    laid out side-by-side and centered as a group at (cx, cy)."""
+    fp = _make_font_props(font_family)
+    raw_letters = []
+    x_cursor = 0.0
+    for char in text:
+        if char == ' ':
+            x_cursor += font_size * 0.3
+            continue
+        tp = TextPath((0, 0), char, size=font_size, prop=fp)
+        polys = tp.to_polygons()
+        if polys:
+            all_pts = np.vstack(polys)
+            char_min_x = all_pts[:, 0].min()
+            char_max_x = all_pts[:, 0].max()
+            shifted = [[(float(pt[0] - char_min_x + x_cursor), float(pt[1])) for pt in poly] for poly in polys]
+            raw_letters.append((char, shifted))
+            x_cursor += (char_max_x - char_min_x) + font_size * letter_spacing
+        else:
+            x_cursor += font_size * 0.3
+
+    if not raw_letters:
+        return []
+
+    # Center the whole group and flip y
+    all_flat = [pt for _, group in raw_letters for poly in group for pt in poly]
+    all_arr = np.array(all_flat)
+    bbox_cx = (all_arr[:, 0].min() + all_arr[:, 0].max()) / 2
+    bbox_cy = (all_arr[:, 1].min() + all_arr[:, 1].max()) / 2
+    result = []
+    for char, contours in raw_letters:
+        flipped = [[(float(pt[0] - bbox_cx + cx), float(-(pt[1] - bbox_cy) + cy)) for pt in poly] for poly in contours]
+        result.append((char, flipped))
+    return result
+
+def rotate_contours(contours, cx, cy, angle_deg):
+    angle_rad = math.radians(angle_deg)
+    cos_a, sin_a = math.cos(angle_rad), math.sin(angle_rad)
+    return [
+        [(cos_a * (x - cx) - sin_a * (y - cy) + cx,
+          sin_a * (x - cx) + cos_a * (y - cy) + cy) for x, y in pts]
+        for pts in contours
+    ]
+
+def _text_path_d(contours):
+    return " ".join(
+        f"M {pts[0][0]:.2f},{pts[0][1]:.2f} " +
+        " ".join(f"L {pt[0]:.2f},{pt[1]:.2f}" for pt in pts[1:]) + " Z"
+        for pts in contours
+    )
+
+def _text_shape_dict(char, cx, cy, font_size, rotation, contours, stroke_width, fill_transparent):
+    result = {
+        "type": "text",
+        "text": char,
+        "cx": cx, "cy": cy,
+        "font_size": font_size,
+        "rotation": rotation,
+        "contours": [list(pts) for pts in contours],
+        "stroke_width": stroke_width,
+    }
+    if fill_transparent:
+        result["fill_transparent"] = True
+    return result
+
+def draw_text_shape(dwg, p):
+    cx = random.randint(p["x_min"], p["x_max"])
+    cy = random.randint(p["y_min"], p["y_max"])
+    font_size = random.randint(p["font_size_min"], p["font_size_max"])
+    font_family = p.get("font_family", "DejaVu Sans")
+    stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
+    fill_transparent = bool(p.get("fill_transparent"))
+    rotation = random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 0))
+
+    if p.get("letter_layers"):
+        letters = make_letter_contours(p["text"], cx, cy, font_size, font_family)
+        if not letters:
+            return None
+        if rotation != 0:
+            letters = [(char, rotate_contours(contours, cx, cy, rotation)) for char, contours in letters]
+        results = []
+        for char, contours in letters:
+            fill_color = "none" if fill_transparent else random_color(p, "fill")
+            dwg.add(dwg.path(
+                d=_text_path_d(contours),
+                fill=fill_color,
+                fill_rule="evenodd",
+                stroke=random_color(p, "stroke"),
+                stroke_width=stroke_width,
+            ))
+            letter_cx = sum(pt[0] for poly in contours for pt in poly) / max(sum(len(poly) for poly in contours), 1)
+            letter_cy = sum(pt[1] for poly in contours for pt in poly) / max(sum(len(poly) for poly in contours), 1)
+            results.append(_text_shape_dict(char, letter_cx, letter_cy, font_size, rotation, contours, stroke_width, fill_transparent))
+        return results
+    else:
+        contours = make_text_contours(p["text"], cx, cy, font_size, font_family)
+        if not contours:
+            return None
+        if rotation != 0:
+            contours = rotate_contours(contours, cx, cy, rotation)
+        fill_color = "none" if fill_transparent else random_color(p, "fill")
+        dwg.add(dwg.path(
+            d=_text_path_d(contours),
+            fill=fill_color,
+            fill_rule="evenodd",
+            stroke=random_color(p, "stroke"),
+            stroke_width=stroke_width,
+        ))
+        return _text_shape_dict(p["text"], cx, cy, font_size, rotation, contours, stroke_width, fill_transparent)
+
 def draw_debug_label(dwg, shape_data, idx):
-    if shape_data["type"] == "circle":
+    if shape_data["type"] in ("circle", "text"):
         tx, ty = shape_data["cx"], shape_data["cy"]
     else:
         pts = shape_data["points"]
@@ -196,6 +335,8 @@ def draw_shape(dwg, p):
         return draw_star(dwg, p)
     elif p["shape"] == "cross":
         return draw_cross(dwg, p)
+    elif p["shape"] == "text":
+        return draw_text_shape(dwg, p)
 
 
 def main():
@@ -232,8 +373,14 @@ def main():
 
         for idx in range(num_shapes):
             p = random.choice(weighted_profiles)
-            shape_data = {"initial_layer": idx, **draw_shape(dwg, p)}
-            shapes.append(shape_data)
+            result = draw_shape(dwg, p)
+            if result is None:
+                continue
+            if isinstance(result, list):
+                for item in result:
+                    shapes.append({"initial_layer": len(shapes), **item})
+            else:
+                shapes.append({"initial_layer": len(shapes), **result})
 
         if DEBUG_MODE:
             for idx, shape_data in enumerate(shapes):

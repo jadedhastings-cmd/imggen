@@ -1,0 +1,22 @@
+[
+  {
+    "weight": 1,
+    "letter_layers": true,
+    "shape": "text",
+    "text": "OUCH",
+    "font_family": "fonts/Lintsec.ttf",
+    "font_size_min": 100,
+    "font_size_max": 200,
+    "rotation_min": -45,
+    "rotation_max": 45,
+    "x_min": 200, "x_max": 600,
+    "y_min": 200, "y_max": 600,
+    "fill_r_min": 0, "fill_r_max": 255,
+    "fill_g_min": 0, "fill_g_max": 255,
+    "fill_b_min": 0, "fill_b_max": 255,
+    "stroke_r_min": 0, "stroke_r_max": 255,
+    "stroke_g_min": 0, "stroke_g_max": 255,
+    "stroke_b_min": 0, "stroke_b_max": 255,
+    "stroke_width_min": 5, "stroke_width_max": 15
+  }
+]

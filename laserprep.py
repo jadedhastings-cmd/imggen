@@ -37,6 +37,30 @@ def to_shapely(shape):
         base_fill = Point(shape["cx"], shape["cy"]).buffer(shape["r"])
     elif shape["type"] in ("polygon", "star", "cross"):
         base_fill = Polygon(shape["points"])
+    elif shape["type"] == "text":
+        polys = []
+        for c in shape["contours"]:
+            if len(c) >= 3:
+                try:
+                    p = Polygon(c)
+                    if not p.is_valid:
+                        p = p.buffer(0)
+                    if p.area > 0:
+                        polys.append(p)
+                except Exception:
+                    pass
+        if not polys:
+            return Polygon(), None
+        polys.sort(key=lambda p: p.area, reverse=True)
+        outer, holes = [], []
+        for p in polys:
+            if any(op.contains(p.centroid) for op in outer):
+                holes.append(p)
+            else:
+                outer.append(p)
+        base_fill = unary_union(outer)
+        for h in holes:
+            base_fill = base_fill.difference(h)
 
     if sw == 0:
         ring = None
@@ -289,6 +313,14 @@ def save_preview_png(shapes, canvas_size, filename, visible_indices, orders, out
                 stroke=stroke,
                 stroke_width=sw,
             ))
+            label_x, label_y = shape["cx"], shape["cy"]
+        elif shape["type"] == "text":
+            path_d = " ".join(
+                f"M {pts[0][0]:.2f},{pts[0][1]:.2f} " +
+                " ".join(f"L {pt[0]:.2f},{pt[1]:.2f}" for pt in pts[1:]) + " Z"
+                for pts in shape["contours"]
+            )
+            dwg.add(dwg.path(d=path_d, fill=fill, fill_rule="evenodd", stroke=stroke, stroke_width=sw))
             label_x, label_y = shape["cx"], shape["cy"]
         elif "points" in shape:
             dwg.add(dwg.polygon(
