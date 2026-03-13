@@ -34,17 +34,22 @@ def to_shapely(shape):
     """
     sw = shape["stroke_width"]
     if shape["type"] == "circle":
-        fill = Point(shape["cx"], shape["cy"]).buffer(shape["r"])
+        base_fill = Point(shape["cx"], shape["cy"]).buffer(shape["r"])
     elif shape["type"] in ("polygon", "star", "cross"):
-        fill = Polygon(shape["points"])
+        base_fill = Polygon(shape["points"])
 
     if sw == 0:
-        return fill, None
+        ring = None
+    else:
+        outer = base_fill.buffer(sw / 2)
+        inner = base_fill.buffer(-sw / 2)
+        ring = outer.difference(inner)
 
-    outer = fill.buffer(sw / 2)
-    inner = fill.buffer(-sw / 2)
-    ring = outer.difference(inner)
-    return fill, ring
+    # Transparent fill: only the ring is physical; fill area is open
+    if shape.get("fill_transparent"):
+        return Polygon(), ring
+
+    return base_fill, ring
 
 
 def build_geometries(shapes):
@@ -173,7 +178,7 @@ def build_layers(orders, geometries, rings, canvas):
     vis_ring, vis_fill = compute_visible_geometries(orders, geometries, rings)
 
     # Window = union of all visible shape extents (vis_ring + vis_fill covers full extent)
-    all_vis = [vis_fill[i] for i in orders] + [vis_ring[i] for i in orders if vis_ring[i] is not None]
+    all_vis = [vis_fill[i] for i in orders if not vis_fill[i].is_empty] + [vis_ring[i] for i in orders if vis_ring[i] is not None]
     window_hole = unary_union([g for g in all_vis if not g.is_empty])
 
     current_hole = window_hole
@@ -188,11 +193,13 @@ def build_layers(orders, geometries, rings, canvas):
             # Ring fills in first (shallower), then inner fill (deeper)
             current_hole = current_hole.difference(vring)
             layers.append((canvas.difference(current_hole), lord_number, True))
-            current_hole = current_hole.difference(vfill)
-            layers.append((canvas.difference(current_hole), lord_number, False))
+            if not vfill.is_empty:
+                current_hole = current_hole.difference(vfill)
+                layers.append((canvas.difference(current_hole), lord_number, False))
         else:
-            current_hole = current_hole.difference(vfill)
-            layers.append((canvas.difference(current_hole), lord_number, False))
+            if not vfill.is_empty:
+                current_hole = current_hole.difference(vfill)
+                layers.append((canvas.difference(current_hole), lord_number, False))
 
         lord_number += 1
 
@@ -272,7 +279,7 @@ def save_preview_png(shapes, canvas_size, filename, visible_indices, orders, out
     for idx in visible_indices:
         shape = shapes[idx]
         sw = shape["stroke_width"]
-        fill = random_color()
+        fill = "none" if shape.get("fill_transparent") else random_color()
         stroke = random_color()
         if shape["type"] == "circle":
             dwg.add(dwg.circle(

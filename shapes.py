@@ -98,19 +98,17 @@ def draw_circle(dwg, p):
     # picks random position/size, calls dwg.add()
     cx, cy, r = random_geometry(p)
     stroke_width1=random.randint(p["stroke_width_min"],p["stroke_width_max"])
+    fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
     dwg.add(dwg.circle(
             center=(cx, cy), r=r,
-            fill=random_color(p,"fill"),
+            fill=fill_color,
             stroke=random_color(p,"stroke"),
             stroke_width=stroke_width1,
     ))
-    return{
-        "type": "circle",
-        "cx": cx,
-        "cy": cy,
-        "r": r,
-        "stroke_width": stroke_width1,
-    }
+    result = {"type": "circle", "cx": cx, "cy": cy, "r": r, "stroke_width": stroke_width1}
+    if p.get("fill_transparent"):
+        result["fill_transparent"] = True
+    return result
 
 def draw_polygon(dwg, p):
     # picks random position/size/sides/rotation, calls dwg.add()
@@ -119,17 +117,17 @@ def draw_polygon(dwg, p):
     sides = random.randint(p["sides_min"], p["sides_max"])
     rotation = random.uniform(0, 2 * math.pi)
     points = make_polygon_points(cx, cy, r, sides, rotation)
+    fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
     dwg.add(dwg.polygon(
         points=points,
-        fill=random_color(p, "fill"),
+        fill=fill_color,
         stroke=random_color(p, "stroke"),
         stroke_width=stroke_width2
     ))
-    return {
-        "type": "polygon",
-        "points": points,
-        "stroke_width": stroke_width2,
-    }
+    result = {"type": "polygon", "points": points, "stroke_width": stroke_width2}
+    if p.get("fill_transparent"):
+        result["fill_transparent"] = True
+    return result
     
 
 def draw_star(dwg, p):
@@ -139,13 +137,17 @@ def draw_star(dwg, p):
     rotation = random.uniform(0, 2 * math.pi)
     stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
     points = make_star_points(cx, cy, r, inner_r, sides, rotation)
+    fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
     dwg.add(dwg.polygon(
         points=points,
-        fill=random_color(p, "fill"),
+        fill=fill_color,
         stroke=random_color(p, "stroke"),
         stroke_width=stroke_width,
     ))
-    return {"type": "star", "points": points, "stroke_width": stroke_width}
+    result = {"type": "star", "points": points, "stroke_width": stroke_width}
+    if p.get("fill_transparent"):
+        result["fill_transparent"] = True
+    return result
 
 def draw_cross(dwg, p):
     cx, cy, r = random_geometry(p)
@@ -153,13 +155,17 @@ def draw_cross(dwg, p):
     num_arms = random.randint(p["sides_min"], p["sides_max"])
     stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
     points = make_cross_points(cx, cy, r, arm_width, num_arms)
+    fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
     dwg.add(dwg.polygon(
         points=points,
-        fill=random_color(p, "fill"),
+        fill=fill_color,
         stroke=random_color(p, "stroke"),
         stroke_width=stroke_width,
     ))
-    return {"type": "cross", "points": points, "stroke_width": stroke_width}
+    result = {"type": "cross", "points": points, "stroke_width": stroke_width}
+    if p.get("fill_transparent"):
+        result["fill_transparent"] = True
+    return result
 
 def draw_debug_label(dwg, shape_data, idx):
     if shape_data["type"] == "circle":
