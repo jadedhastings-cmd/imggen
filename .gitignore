@@ -1,0 +1,6 @@
+.venv/
+output/
+*.png
+*.svg
+*.json
+__pycache__/
