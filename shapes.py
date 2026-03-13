@@ -411,14 +411,16 @@ def _nest_geometry(p, cx, cy):
     max_count = random.randint(p["count_min"], p["count_max"])
     geoms = []
     if uniform:
+        r_key = "radius_min" if "radius_min" in sub_p else "r_min"
+        r_key_max = "radius_max" if "radius_max" in sub_p else "r_max"
         ring_width = random.randint(p["ring_width_min"], p["ring_width_max"])
-        base_r = random.randint(sub_p["r_min"], sub_p["r_max"])
+        base_r = random.randint(sub_p[r_key], sub_p[r_key_max])
         for i in range(max_count):
             r = base_r - i * ring_width
             if r <= 0:
                 break
             sp = dict(sub_p)
-            sp["r_min"] = sp["r_max"] = r
+            sp[r_key] = sp[r_key_max] = r
             geom = _profile_to_geometry(sp, cx, cy)
             if not geom.is_empty:
                 geoms.append(geom)
@@ -494,14 +496,16 @@ def draw_nest(dwg, p):
     sub_p_base = dict(random.choice(_build_weighted_subs(p["sub_profiles"])))
     results = []
     if uniform:
+        r_key = "radius_min" if "radius_min" in sub_p_base else "r_min"
+        r_key_max = "radius_max" if "radius_max" in sub_p_base else "r_max"
         ring_width = random.randint(p["ring_width_min"], p["ring_width_max"])
-        base_r = random.randint(sub_p_base["r_min"], sub_p_base["r_max"])
+        base_r = random.randint(sub_p_base[r_key], sub_p_base[r_key_max])
         for i in range(max_count):
             r = base_r - i * ring_width
             if r <= 0:
                 break
             sp = dict(sub_p_base)
-            sp["r_min"] = sp["r_max"] = r
+            sp[r_key] = sp[r_key_max] = r
             sp["x_min"] = sp["x_max"] = cx
             sp["y_min"] = sp["y_max"] = cy
             result = draw_shape(dwg, sp)
