@@ -35,7 +35,7 @@ def to_shapely(shape):
     sw = shape["stroke_width"]
     if shape["type"] == "circle":
         fill = Point(shape["cx"], shape["cy"]).buffer(shape["r"])
-    elif shape["type"] == "polygon":
+    elif shape["type"] in ("polygon", "star", "cross"):
         fill = Polygon(shape["points"])
 
     if sw == 0:
@@ -229,8 +229,9 @@ def save_layer_svg(geometry, canvas_size, filename):
     """Write a single layer geometry as a black-filled SVG, then render to PNG."""
     w, h = canvas_size
     path_data = geometry.svg()
-    d = re.search(r'd="([^"]+)"', path_data).group(1)
-    svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}"><path d="{d}" fill="black"/></svg>'
+    ds = re.findall(r'd="([^"]+)"', path_data)
+    combined_d = " ".join(ds)
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}"><path fill-rule="evenodd" d="{combined_d}" fill="black"/></svg>'
     with open(filename, "w") as f:
         f.write(svg)
 
@@ -282,7 +283,7 @@ def save_preview_png(shapes, canvas_size, filename, visible_indices, orders, out
                 stroke_width=sw,
             ))
             label_x, label_y = shape["cx"], shape["cy"]
-        elif shape["type"] == "polygon":
+        elif "points" in shape:
             dwg.add(dwg.polygon(
                 points=shape["points"],
                 fill=fill,

@@ -6,6 +6,9 @@ import math
 import json
 import os
 import glob
+from shapely.geometry import box as _shapely_box
+from shapely.affinity import rotate as _shapely_rotate, translate as _shapely_translate
+from shapely.ops import unary_union as _shapely_union
 
 DEBUG_MODE = False
 
@@ -56,6 +59,26 @@ def make_polygon_points(cx, cy, r, sides, rotation):
         y = cy + r * math.sin(angle)
         points.append((x, y))
     return points
+
+def make_star_points(cx, cy, r, inner_r, sides, rotation):
+    points = []
+    for i in range(sides):
+        outer_angle = rotation + (2 * math.pi * i / sides)
+        points.append((cx + r * math.cos(outer_angle), cy + r * math.sin(outer_angle)))
+        inner_angle = rotation + (2 * math.pi * (i + 0.5) / sides)
+        points.append((cx + inner_r * math.cos(inner_angle), cy + inner_r * math.sin(inner_angle)))
+    return points
+
+def make_cross_points(cx, cy, r, arm_width, num_arms):
+    arm = _shapely_box(-arm_width / 2, 0, arm_width / 2, r)
+    arms = []
+    for i in range(num_arms):
+        angle_deg = i * 360 / num_arms
+        rotated = _shapely_rotate(arm, angle_deg, origin=(0, 0))
+        rotated = _shapely_translate(rotated, cx, cy)
+        arms.append(rotated)
+    cross = _shapely_union(arms)
+    return list(cross.exterior.coords[:-1])
 
 def random_color(p, prefix="fill"):
     return "rgb({},{},{})".format(
@@ -109,6 +132,35 @@ def draw_polygon(dwg, p):
     }
     
 
+def draw_star(dwg, p):
+    cx, cy, r = random_geometry(p)
+    inner_r = r * random.uniform(p["inner_r_ratio_min"], p["inner_r_ratio_max"])
+    sides = random.randint(p["sides_min"], p["sides_max"])
+    rotation = random.uniform(0, 2 * math.pi)
+    stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
+    points = make_star_points(cx, cy, r, inner_r, sides, rotation)
+    dwg.add(dwg.polygon(
+        points=points,
+        fill=random_color(p, "fill"),
+        stroke=random_color(p, "stroke"),
+        stroke_width=stroke_width,
+    ))
+    return {"type": "star", "points": points, "stroke_width": stroke_width}
+
+def draw_cross(dwg, p):
+    cx, cy, r = random_geometry(p)
+    arm_width = random.randint(p["arm_width_min"], p["arm_width_max"])
+    num_arms = random.randint(p["sides_min"], p["sides_max"])
+    stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
+    points = make_cross_points(cx, cy, r, arm_width, num_arms)
+    dwg.add(dwg.polygon(
+        points=points,
+        fill=random_color(p, "fill"),
+        stroke=random_color(p, "stroke"),
+        stroke_width=stroke_width,
+    ))
+    return {"type": "cross", "points": points, "stroke_width": stroke_width}
+
 def draw_debug_label(dwg, shape_data, idx):
     if shape_data["type"] == "circle":
         tx, ty = shape_data["cx"], shape_data["cy"]
@@ -134,7 +186,11 @@ def draw_shape(dwg, p):
 
     elif p["shape"] == "polygon":
         return draw_polygon(dwg, p)
-    
+    elif p["shape"] == "star":
+        return draw_star(dwg, p)
+    elif p["shape"] == "cross":
+        return draw_cross(dwg, p)
+
 
 def main():
     # parse args, build weighted list, loop, save, convert
