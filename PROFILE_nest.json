@@ -4,8 +4,9 @@
     "shape": "nest",
     "x_min": 300, "x_max": 500,
     "y_min": 300, "y_max": 500,
-    "count_min": 3, "count_max": 5,
-    "scale_factor_min": 0.55, "scale_factor_max": 0.75,
+    "uniform_adjustment": true,
+    "count_min": 20, "count_max": 20,
+    "ring_width_min": 10, "ring_width_max": 20,
     "stroke_width_min": 0, "stroke_width_max": 0,
     "fill_r_min": 0, "fill_r_max": 255,
     "fill_g_min": 0, "fill_g_max": 255,
@@ -15,18 +16,18 @@
         "weight": 1,
         "shape": "circle",
         "r_min": 80, "r_max": 130,
-        "fill_r_min": 200, "fill_r_max": 255,
-        "fill_g_min": 100, "fill_g_max": 200,
+        "fill_r_min": 0, "fill_r_max": 255,
+        "fill_g_min": 0, "fill_g_max": 200,
         "fill_b_min": 0, "fill_b_max": 100,
         "stroke_r_min": 0, "stroke_r_max": 50,
         "stroke_g_min": 0, "stroke_g_max": 50,
         "stroke_b_min": 0, "stroke_b_max": 50,
-        "stroke_width_min": 5, "stroke_width_max": 15
+        "stroke_width_min": 0, "stroke_width_max": 0
       }
     ]
   },
   {
-    "weight": 1,
+    "weight": 0,
     "shape": "nest",
     "x_min": 200, "x_max": 600,
     "y_min": 200, "y_max": 600,
@@ -49,7 +50,7 @@
         "stroke_r_min": 0, "stroke_r_max": 50,
         "stroke_g_min": 0, "stroke_g_max": 50,
         "stroke_b_min": 0, "stroke_b_max": 50,
-        "stroke_width_min": 6, "stroke_width_max": 14
+        "stroke_width_min": 0, "stroke_width_max": 0
       }
     ]
   }

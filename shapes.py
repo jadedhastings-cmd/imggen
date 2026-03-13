@@ -406,16 +406,29 @@ def _constellation_geometry(p, cx, cy):
     return _shapely_union(geoms) if geoms else _ShapelyPolygon()
 
 def _nest_geometry(p, cx, cy):
-    count = random.randint(p["count_min"], p["count_max"])
-    scale_factor = random.uniform(p["scale_factor_min"], p["scale_factor_max"])
+    uniform = p.get("uniform_adjustment", True)
     sub_p = dict(random.choice(_build_weighted_subs(p["sub_profiles"])))
+    max_count = random.randint(p["count_min"], p["count_max"])
     geoms = []
-    scale = 1.0
-    for _ in range(count):
-        geom = _profile_to_geometry(_scale_profile(sub_p, scale), cx, cy)
-        if not geom.is_empty:
-            geoms.append(geom)
-        scale *= scale_factor
+    if uniform:
+        ring_width = random.randint(p["ring_width_min"], p["ring_width_max"])
+        base_r = random.randint(sub_p["r_min"], sub_p["r_max"])
+        for i in range(max_count):
+            r = base_r - i * ring_width
+            if r <= 0:
+                break
+            sp = dict(sub_p)
+            sp["r_min"] = sp["r_max"] = r
+            geom = _profile_to_geometry(sp, cx, cy)
+            if not geom.is_empty:
+                geoms.append(geom)
+    else:
+        scale = 1.0
+        for _ in range(max_count):
+            geom = _profile_to_geometry(_scale_profile(sub_p, scale), cx, cy)
+            if not geom.is_empty:
+                geoms.append(geom)
+            scale *= random.uniform(p["scale_factor_min"], p["scale_factor_max"])
     return _shapely_union(geoms) if geoms else _ShapelyPolygon()
 
 def draw_constellation(dwg, p):
@@ -476,22 +489,34 @@ def draw_constellation(dwg, p):
 def draw_nest(dwg, p):
     cx = random.randint(p["x_min"], p["x_max"])
     cy = random.randint(p["y_min"], p["y_max"])
-    count = random.randint(p["count_min"], p["count_max"])
-    scale_factor = random.uniform(p["scale_factor_min"], p["scale_factor_max"])
+    uniform = p.get("uniform_adjustment", True)
+    max_count = random.randint(p["count_min"], p["count_max"])
     sub_p_base = dict(random.choice(_build_weighted_subs(p["sub_profiles"])))
     results = []
-    scale = 1.0
-    for _ in range(count):
-        scaled_p = _scale_profile(sub_p_base, scale)
-        scaled_p["x_min"] = scaled_p["x_max"] = cx
-        scaled_p["y_min"] = scaled_p["y_max"] = cy
-        result = draw_shape(dwg, scaled_p)
-        if result is not None:
-            if isinstance(result, list):
-                results.extend(result)
-            else:
-                results.append(result)
-        scale *= scale_factor
+    if uniform:
+        ring_width = random.randint(p["ring_width_min"], p["ring_width_max"])
+        base_r = random.randint(sub_p_base["r_min"], sub_p_base["r_max"])
+        for i in range(max_count):
+            r = base_r - i * ring_width
+            if r <= 0:
+                break
+            sp = dict(sub_p_base)
+            sp["r_min"] = sp["r_max"] = r
+            sp["x_min"] = sp["x_max"] = cx
+            sp["y_min"] = sp["y_max"] = cy
+            result = draw_shape(dwg, sp)
+            if result is not None:
+                results.append(result) if not isinstance(result, list) else results.extend(result)
+    else:
+        scale = 1.0
+        for _ in range(max_count):
+            scaled_p = _scale_profile(sub_p_base, scale)
+            scaled_p["x_min"] = scaled_p["x_max"] = cx
+            scaled_p["y_min"] = scaled_p["y_max"] = cy
+            result = draw_shape(dwg, scaled_p)
+            if result is not None:
+                results.append(result) if not isinstance(result, list) else results.extend(result)
+            scale *= random.uniform(p["scale_factor_min"], p["scale_factor_max"])
     return results if results else None
 
 def draw_debug_label(dwg, shape_data, idx):
