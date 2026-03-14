@@ -11,6 +11,7 @@ import cairosvg
 FILE_TO_PREP = "shapes1.json"
 APPELLATION = "laser"
 TAPER_PX = 1  # pixels shrunk per side per layer above the base
+ASSEMBLY_MODE = "subtractive"  # "subtractive" | "additive"
 
 
 # --- Load input data ---
@@ -226,19 +227,16 @@ def compute_visible_geometries(orders, geometries, rings):
     return vis_ring, vis_fill
 
 
-def build_layers(orders, geometries, rings, canvas):
-    """Generate the ordered stack of laser cut layers using a top-down approach.
-    Lord order (outside-in) determines which shape is rendered at each layer depth.
-    JSON order determines what is rendered: each shape's contribution is clipped to
-    its JSON-visible portion via compute_visible_geometries.
-    Starts with the top window (union of all visible extents), then progressively
-    fills in each shape's ring then fill, shallowest lord first.
+def build_layers_subtractive(orders, geometries, rings, canvas):
+    """Subtractive mode: each lord layer is a full canvas rectangle with progressive
+    holes cut out. Lord order (outside-in) determines depth; JSON visibility clipping
+    determines each shape's rendered area.
     Returns a list of (geometry, lord_label, is_ring) tuples, shallowest to deepest.
     """
     vis_ring, vis_fill = compute_visible_geometries(orders, geometries, rings)
 
-    # Window = union of all visible shape extents (vis_ring + vis_fill covers full extent)
-    all_vis = [vis_fill[i] for i in orders if not vis_fill[i].is_empty] + [vis_ring[i] for i in orders if vis_ring[i] is not None]
+    all_vis = [vis_fill[i] for i in orders if not vis_fill[i].is_empty] + \
+              [vis_ring[i] for i in orders if vis_ring[i] is not None]
     window_hole = unary_union([g for g in all_vis if not g.is_empty])
 
     current_hole = window_hole
@@ -250,7 +248,6 @@ def build_layers(orders, geometries, rings, canvas):
         vfill = vis_fill[idx]
 
         if vring is not None:
-            # Ring fills in first (shallower), then inner fill (deeper)
             current_hole = current_hole.difference(vring)
             layers.append((canvas.difference(current_hole), lord_number, True))
             if not vfill.is_empty:
@@ -263,7 +260,44 @@ def build_layers(orders, geometries, rings, canvas):
 
         lord_number += 1
 
-    # Base layer: solid canvas at the bottom
+    layers.append((canvas, "base", False))
+    return layers
+
+
+def build_layers_additive(visible_indices, geometries, rings, canvas):
+    """Additive mode: layers are cumulative unions built from the top shape downward,
+    following the original JSON render order (highest index = top = first lord).
+    Each layer adds one shape's ring (if any) then fill to the running solid.
+    No compute_ordering needed — lord order matches render order directly.
+    Returns a list of (geometry, lord_label, is_ring) tuples, shallowest to deepest.
+    """
+    all_geoms = []
+    for i in visible_indices:
+        g = geometries[i]
+        r = rings[i]
+        all_geoms.append(g.union(r) if r is not None else g)
+    window_hole = unary_union(all_geoms)
+
+    layers = [(canvas.difference(window_hole), "window", False)]
+
+    current_solid = Polygon()
+    lord_number = 1
+
+    for idx in reversed(visible_indices):  # top shape first (highest JSON index)
+        ring = rings[idx]
+        fill = geometries[idx]
+        inner_fill = fill.difference(ring) if ring is not None else fill
+
+        if ring is not None and not ring.is_empty:
+            current_solid = current_solid.union(ring)
+            layers.append((current_solid, lord_number, True))
+
+        if not inner_fill.is_empty:
+            current_solid = current_solid.union(inner_fill)
+            layers.append((current_solid, lord_number, False))
+
+        lord_number += 1
+
     layers.append((canvas, "base", False))
     return layers
 
@@ -402,6 +436,7 @@ def main():
     parser.add_argument("--file", type=str, default=FILE_TO_PREP)
     parser.add_argument("--app", type=str, default=APPELLATION)
     parser.add_argument("--taper", type=float, default=TAPER_PX)
+    parser.add_argument("--mode", type=str, default=ASSEMBLY_MODE, choices=["subtractive", "additive"])
     args = parser.parse_args()
 
     canvas_size, shapes, base_name = load_shapes(args.file)
@@ -412,9 +447,15 @@ def main():
 
     geometries, rings = build_geometries(shapes)
     visible_indices, visible_areas = filter_visible(shapes, geometries, rings)
-    nest_groups = build_nest_groups(shapes)
-    orders = compute_ordering(visible_indices, visible_areas, geometries, rings, shapes, nest_groups)
-    layers = build_layers(orders, geometries, rings, canvas)
+
+    if args.mode == "additive":
+        layers = build_layers_additive(visible_indices, geometries, rings, canvas)
+        orders = list(reversed(visible_indices))  # for preview label consistency
+    else:
+        nest_groups = build_nest_groups(shapes)
+        orders = compute_ordering(visible_indices, visible_areas, geometries, rings, shapes, nest_groups)
+        layers = build_layers_subtractive(orders, geometries, rings, canvas)
+
     layers = apply_taper(layers, canvas_size, args.taper)
 
     save_preview_png(shapes, canvas_size, f"{base_name}_{args.app}_preview.png", visible_indices, orders, output_dir)

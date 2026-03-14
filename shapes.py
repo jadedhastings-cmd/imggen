@@ -27,7 +27,7 @@ NUM_FILES = 20
 NUM_SHAPES = 50
 
 #What to name the output files
-OUTPUT_NAME = "2026_03_13_shapes"
+OUTPUT_NAME = "2026_03_14_shapes"
 
 # Canvas size
 CANVAS_WIDTH_IN = 4
