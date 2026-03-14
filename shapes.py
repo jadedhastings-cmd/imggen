@@ -119,6 +119,19 @@ def random_color(p, prefix="fill"):
     )
 
 
+def _result(type_, stroke_width, fill_transparent, **kwargs):
+    d = {"type": type_, "stroke_width": stroke_width, **kwargs}
+    if fill_transparent:
+        d["fill_transparent"] = True
+    return d
+
+
+def _random_start_angle(p):
+    rot_min = math.radians(p["rotation_min"]) if "rotation_min" in p else 0
+    rot_max = math.radians(p["rotation_max"]) if "rotation_max" in p else 2 * math.pi
+    return random.uniform(rot_min, rot_max)
+
+
 def random_geometry(p):
     cx = random.randint(p["x_min"], p["x_max"])
     cy = random.randint(p["y_min"], p["y_max"])
@@ -126,40 +139,24 @@ def random_geometry(p):
     return cx, cy, r
 
 def draw_circle(dwg, p):
-    # picks random position/size, calls dwg.add()
     cx, cy, r = random_geometry(p)
-    stroke_width1=random.randint(p["stroke_width_min"],p["stroke_width_max"])
+    stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
     fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
-    dwg.add(dwg.circle(
-            center=(cx, cy), r=r,
-            fill=fill_color,
-            stroke=random_color(p,"stroke"),
-            stroke_width=stroke_width1,
-    ))
-    result = {"type": "circle", "cx": cx, "cy": cy, "r": r, "stroke_width": stroke_width1}
-    if p.get("fill_transparent"):
-        result["fill_transparent"] = True
-    return result
+    dwg.add(dwg.circle(center=(cx, cy), r=r, fill=fill_color,
+                       stroke=random_color(p, "stroke"), stroke_width=stroke_width))
+    return _result("circle", stroke_width, p.get("fill_transparent"), cx=cx, cy=cy, r=r)
 
 def draw_polygon(dwg, p):
-    # picks random position/size/sides/rotation, calls dwg.add()
     cx, cy, r = random_geometry(p)
-    stroke_width2=random.randint(p["stroke_width_min"],p["stroke_width_max"])
+    stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
     sides = random.randint(p["sides_min"], p["sides_max"])
     rotation = math.radians(random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 360)))
     points = make_polygon_points(cx, cy, r, sides, rotation)
     fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
-    dwg.add(dwg.polygon(
-        points=points,
-        fill=fill_color,
-        stroke=random_color(p, "stroke"),
-        stroke_width=stroke_width2
-    ))
-    result = {"type": "polygon", "points": points, "stroke_width": stroke_width2}
-    if p.get("fill_transparent"):
-        result["fill_transparent"] = True
-    return result
-    
+    dwg.add(dwg.polygon(points=points, fill=fill_color,
+                        stroke=random_color(p, "stroke"), stroke_width=stroke_width))
+    return _result("polygon", stroke_width, p.get("fill_transparent"), points=points)
+
 
 def draw_star(dwg, p):
     cx, cy, r = random_geometry(p)
@@ -169,16 +166,9 @@ def draw_star(dwg, p):
     stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
     points = make_star_points(cx, cy, r, inner_r, sides, rotation)
     fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
-    dwg.add(dwg.polygon(
-        points=points,
-        fill=fill_color,
-        stroke=random_color(p, "stroke"),
-        stroke_width=stroke_width,
-    ))
-    result = {"type": "star", "points": points, "stroke_width": stroke_width}
-    if p.get("fill_transparent"):
-        result["fill_transparent"] = True
-    return result
+    dwg.add(dwg.polygon(points=points, fill=fill_color,
+                        stroke=random_color(p, "stroke"), stroke_width=stroke_width))
+    return _result("star", stroke_width, p.get("fill_transparent"), points=points)
 
 def draw_cross(dwg, p):
     cx, cy, r = random_geometry(p)
@@ -188,16 +178,9 @@ def draw_cross(dwg, p):
     rotation_deg = random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 360))
     points = make_cross_points(cx, cy, r, arm_width, num_arms, rotation_deg)
     fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
-    dwg.add(dwg.polygon(
-        points=points,
-        fill=fill_color,
-        stroke=random_color(p, "stroke"),
-        stroke_width=stroke_width,
-    ))
-    result = {"type": "cross", "points": points, "stroke_width": stroke_width}
-    if p.get("fill_transparent"):
-        result["fill_transparent"] = True
-    return result
+    dwg.add(dwg.polygon(points=points, fill=fill_color,
+                        stroke=random_color(p, "stroke"), stroke_width=stroke_width))
+    return _result("cross", stroke_width, p.get("fill_transparent"), points=points)
 
 def _make_font_props(font_family):
     if os.path.isfile(font_family):
@@ -275,18 +258,9 @@ def _text_path_d(contours):
     )
 
 def _text_shape_dict(char, cx, cy, font_size, rotation, contours, stroke_width, fill_transparent):
-    result = {
-        "type": "text",
-        "text": char,
-        "cx": cx, "cy": cy,
-        "font_size": font_size,
-        "rotation": rotation,
-        "contours": [list(pts) for pts in contours],
-        "stroke_width": stroke_width,
-    }
-    if fill_transparent:
-        result["fill_transparent"] = True
-    return result
+    return _result("text", stroke_width, fill_transparent,
+                   text=char, cx=cx, cy=cy, font_size=font_size,
+                   rotation=rotation, contours=[list(pts) for pts in contours])
 
 def draw_text_shape(dwg, p):
     cx = random.randint(p["x_min"], p["x_max"])
@@ -336,10 +310,7 @@ def draw_text_shape(dwg, p):
 # --- Compound shape helpers ---
 
 def _build_weighted_subs(sub_profiles):
-    weighted = []
-    for sp in sub_profiles:
-        weighted.extend([sp] * sp.get("weight", 1))
-    return weighted
+    return [sp for sp in sub_profiles for _ in range(sp.get("weight", 1))]
 
 def _scale_profile(p, scale):
     p = dict(p)
@@ -450,9 +421,7 @@ def _profile_to_geometry(p, cx, cy):
 def _constellation_geometry(p, cx, cy):
     radius = random.randint(p["radius_min"], p["radius_max"])
     count = random.randint(p["count_min"], p["count_max"])
-    rot_min = math.radians(p["rotation_min"]) if "rotation_min" in p else 0
-    rot_max = math.radians(p["rotation_max"]) if "rotation_max" in p else 2 * math.pi
-    start_angle = random.uniform(rot_min, rot_max)
+    start_angle = _random_start_angle(p)
     weighted_subs = _build_weighted_subs(p["sub_profiles"])
     uniform_size = p.get("uniform_size", False)
     fixed_size = None
@@ -506,9 +475,7 @@ def draw_constellation(dwg, p):
     cy = random.randint(p["y_min"], p["y_max"])
     radius = random.randint(p["radius_min"], p["radius_max"])
     count = random.randint(p["count_min"], p["count_max"])
-    rot_min = math.radians(p["rotation_min"]) if "rotation_min" in p else 0
-    rot_max = math.radians(p["rotation_max"]) if "rotation_max" in p else 2 * math.pi
-    start_angle = random.uniform(rot_min, rot_max)
+    start_angle = _random_start_angle(p)
     one_layer = p.get("one_layer", False)
     fill_transparent = bool(p.get("fill_transparent"))
     weighted_subs = _build_weighted_subs(p["sub_profiles"])
@@ -539,11 +506,8 @@ def draw_constellation(dwg, p):
         contours = _add_contour_paths(dwg, union, stroke_width, fill_transparent, p)
         if not contours:
             return None
-        result = {"type": "constellation", "cx": cx, "cy": cy,
-                  "contours": contours, "stroke_width": stroke_width}
-        if fill_transparent:
-            result["fill_transparent"] = True
-        return result
+        return _result("constellation", stroke_width, fill_transparent,
+                       cx=cx, cy=cy, contours=contours)
     else:
         results = []
         for i in range(count):
@@ -785,11 +749,8 @@ def draw_bumped_polygon(dwg, p):
     contours = _add_contour_paths(dwg, geom, stroke_width, fill_transparent, p)
     if not contours:
         return None
-    result = {"type": "bumped_polygon", "cx": cx, "cy": cy,
-              "contours": contours, "stroke_width": stroke_width}
-    if fill_transparent:
-        result["fill_transparent"] = True
-    return result
+    return _result("bumped_polygon", stroke_width, fill_transparent,
+                   cx=cx, cy=cy, contours=contours)
 
 
 def draw_daisy(dwg, p):
@@ -803,9 +764,7 @@ def draw_daisy(dwg, p):
     one_layer = p.get("one_layer", False)
     fill_transparent = bool(p.get("fill_transparent"))
     stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
-    rot_min = math.radians(p["rotation_min"]) if "rotation_min" in p else 0
-    rot_max = math.radians(p["rotation_max"]) if "rotation_max" in p else 2 * math.pi
-    start_angle = random.uniform(rot_min, rot_max)
+    start_angle = _random_start_angle(p)
     petal_local = _make_petal(petal_r, length_ratio)
 
     if one_layer:
@@ -821,11 +780,7 @@ def draw_daisy(dwg, p):
         contours = _add_contour_paths(dwg, union, stroke_width, fill_transparent, p)
         if not contours:
             return None
-        result = {"type": "daisy", "cx": cx, "cy": cy,
-                  "contours": contours, "stroke_width": stroke_width}
-        if fill_transparent:
-            result["fill_transparent"] = True
-        return result
+        return _result("daisy", stroke_width, fill_transparent, cx=cx, cy=cy, contours=contours)
     else:
         results = []
         for i in range(count):
@@ -838,11 +793,8 @@ def draw_daisy(dwg, p):
                 continue
             petal_cx = cx + arm_r * math.cos(angle)
             petal_cy = cy + arm_r * math.sin(angle)
-            result = {"type": "petal", "cx": petal_cx, "cy": petal_cy,
-                      "contours": contours, "stroke_width": stroke_width}
-            if fill_transparent:
-                result["fill_transparent"] = True
-            results.append(result)
+            results.append(_result("petal", stroke_width, fill_transparent,
+                                   cx=petal_cx, cy=petal_cy, contours=contours))
         return results if results else None
 
 
@@ -896,60 +848,35 @@ def draw_line(dwg, p):
     contours = _add_contour_paths(dwg, geom, stroke_width, fill_transparent, p)
     if not contours:
         return None
+    return _result("line", stroke_width, fill_transparent, cx=cx, cy=cy, contours=contours)
 
-    result = {"type": "line", "cx": cx, "cy": cy, "contours": contours, "stroke_width": stroke_width}
-    if fill_transparent:
-        result["fill_transparent"] = True
-    return result
 
+_DRAW = {
+    "circle": draw_circle, "polygon": draw_polygon, "star": draw_star,
+    "cross": draw_cross, "text": draw_text_shape, "constellation": draw_constellation,
+    "nest": draw_nest, "bumped_polygon": draw_bumped_polygon,
+    "daisy": draw_daisy, "line": draw_line,
+}
 
 def draw_shape(dwg, p):
-    # routes to the right function based on p["shape"]
-    if p["shape"] == "circle":
-       return draw_circle(dwg,p)
-
-    elif p["shape"] == "polygon":
-        return draw_polygon(dwg, p)
-    elif p["shape"] == "star":
-        return draw_star(dwg, p)
-    elif p["shape"] == "cross":
-        return draw_cross(dwg, p)
-    elif p["shape"] == "text":
-        return draw_text_shape(dwg, p)
-    elif p["shape"] == "constellation":
-        return draw_constellation(dwg, p)
-    elif p["shape"] == "nest":
-        return draw_nest(dwg, p)
-    elif p["shape"] == "bumped_polygon":
-        return draw_bumped_polygon(dwg, p)
-    elif p["shape"] == "daisy":
-        return draw_daisy(dwg, p)
-    elif p["shape"] == "line":
-        return draw_line(dwg, p)
+    return _DRAW[p["shape"]](dwg, p)
 
 
 def main():
-    # parse args, build weighted list, loop, save, convert
     parser = argparse.ArgumentParser()
     parser.add_argument("--count", type=int, default=NUM_SHAPES)
     args = parser.parse_args()
     num_shapes = args.count
 
-    # Build weighted profile list
-    weighted_profiles = []
-    for profile in PROFILES:
-        weighted_profiles.extend([profile] * profile["weight"])
+    weighted_profiles = _build_weighted_subs(PROFILES)
 
-    # Find the highest existing output subfolder number to avoid overwriting
     os.makedirs("output", exist_ok=True)
-    existing_dirs = glob.glob(f"output/{OUTPUT_NAME}*/")
-    existing_nums = []
-    for d in existing_dirs:
-        name = os.path.basename(os.path.normpath(d))
-        suffix = name[len(OUTPUT_NAME):]
-        if suffix.isdigit():
-            existing_nums.append(int(suffix))
-    start = max(existing_nums) + 1 if existing_nums else 1
+    existing_nums = [
+        int(sfx)
+        for d in glob.glob(f"output/{OUTPUT_NAME}*/")
+        if (sfx := os.path.basename(os.path.normpath(d))[len(OUTPUT_NAME):]).isdigit()
+    ]
+    start = max(existing_nums, default=0) + 1
 
     # SVG
     for i in range(start, start + NUM_FILES):
