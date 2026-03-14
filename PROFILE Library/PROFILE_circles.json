@@ -1,0 +1,42 @@
+[
+  {
+    "weight": 1,
+    "shape": "circle",
+    "x_min": 150, "x_max": 250,
+    "y_min": 150, "y_max": 250,
+    "r_min": 30, "r_max": 50,
+    "fill_r_min": 0, "fill_r_max": 255,
+    "fill_g_min": 0, "fill_g_max": 255,
+    "fill_b_min": 0, "fill_b_max": 255,
+    "stroke_r_min": 0, "stroke_r_max": 255,
+    "stroke_g_min": 0, "stroke_g_max": 255,
+    "stroke_b_min": 0, "stroke_b_max": 255,
+    "stroke_width_min": 5, "stroke_width_max": 15
+  },
+  {
+    "weight": 0,
+    "shape": "circle",
+    "x_min": 150, "x_max": 250,
+    "y_min": 150, "y_max": 250,
+    "r_min": 30, "r_max": 100,
+    "fill_r_min": 0, "fill_r_max": 255,
+    "fill_g_min": 0, "fill_g_max": 255,
+    "fill_b_min": 0, "fill_b_max": 255,
+    "stroke_r_min": 0, "stroke_r_max": 255,
+    "stroke_g_min": 0, "stroke_g_max": 255,
+    "stroke_b_min": 0, "stroke_b_max": 255,
+    "stroke_width_min": 5, "stroke_width_max": 25
+  },
+  {
+    "weight": 1,
+    "shape": "circle",
+    "fill_transparent": true,
+    "x_min": 150, "x_max": 250,
+    "y_min": 150, "y_max": 250,
+    "r_min": 30, "r_max": 100,
+    "stroke_r_min": 0, "stroke_r_max": 255,
+    "stroke_g_min": 0, "stroke_g_max": 255,
+    "stroke_b_min": 0, "stroke_b_max": 255,
+    "stroke_width_min": 15, "stroke_width_max": 40
+  }
+]

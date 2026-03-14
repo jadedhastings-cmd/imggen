@@ -6,7 +6,9 @@ import math
 import json
 import os
 import glob
-from shapely.geometry import box as _shapely_box, Point as _ShapelyPoint, Polygon as _ShapelyPolygon, MultiPoint as _ShapelyMultiPoint, MultiPolygon as _ShapelyMultiPolygon
+
+_nest_counter = [0]
+from shapely.geometry import box as _shapely_box, Point as _ShapelyPoint, Polygon as _ShapelyPolygon, MultiPoint as _ShapelyMultiPoint, MultiPolygon as _ShapelyMultiPolygon, LineString as _ShapelyLineString
 from shapely.affinity import rotate as _shapely_rotate, translate as _shapely_translate
 from shapely.ops import unary_union as _shapely_union
 from shapely.validation import make_valid as _shapely_make_valid
@@ -19,17 +21,17 @@ import numpy as np
 DEBUG_MODE = False
 
 #Number of outputs
-NUM_FILES = 5
+NUM_FILES = 20
 
 #number of shapes to be generated
-NUM_SHAPES = 1
+NUM_SHAPES = 50
 
 #What to name the output files
-OUTPUT_NAME = "shapes"
+OUTPUT_NAME = "2026_03_13_shapes"
 
 # Canvas size
-CANVAS_WIDTH_IN = 8
-CANVAS_HEIGHT_IN = 8
+CANVAS_WIDTH_IN = 4
+CANVAS_HEIGHT_IN = 4
 RESOLUTION = 100  # pixels per inch
 
 CANVAS_SIZE = (CANVAS_WIDTH_IN * RESOLUTION, CANVAS_HEIGHT_IN * RESOLUTION)
@@ -38,7 +40,10 @@ CANVAS_SIZE = (CANVAS_WIDTH_IN * RESOLUTION, CANVAS_HEIGHT_IN * RESOLUTION)
 PROFILES = []
 for _profile_file in sorted(glob.glob("PROFILE_*.json")):
     with open(_profile_file) as _f:
-        _data = json.load(_f)
+        try:
+            _data = json.load(_f)
+        except json.JSONDecodeError as _e:
+            raise json.JSONDecodeError(f"{_profile_file}: {_e.msg}", _e.doc, _e.pos) from None
         if isinstance(_data, list):
             PROFILES.extend(_data)
         else:
@@ -46,6 +51,24 @@ for _profile_file in sorted(glob.glob("PROFILE_*.json")):
 
 if not PROFILES:
     raise RuntimeError("No profiles loaded. Add at least one PROFILE_*.json file.")
+
+# --- Profile validation warnings ---
+for _p in PROFILES:
+    _shape = _p.get("shape", "")
+    _sw_min = _p.get("stroke_width_min", 0)
+    _sw_max = _p.get("stroke_width_max", 0)
+    _mode = _p.get("bump_mode", "")
+    _ratio_max = _p.get("bump_ratio_max", 0)
+
+    if _shape == "bumped_polygon":
+        if _mode in ("alternate", "all_in", "random") and _sw_max > 0:
+            print(f"WARNING: profile bump_mode='{_mode}' with stroke_width_max={_sw_max} "
+                  f"— inward bumps with positive stroke widths may produce antenna artifacts "
+                  f"at near-self-intersecting boundaries. Set stroke_width_min/max to 0 to avoid.")
+        if _mode in ("alternate", "all_in", "random") and _ratio_max > 0.4:
+            print(f"WARNING: profile bump_mode='{_mode}' with bump_ratio_max={_ratio_max} "
+                  f"— values above 0.4 risk inward bumps meeting at center, causing "
+                  f"self-intersecting geometry and stroke artifacts.")
 
 
 def export_json(shapes, filename):
@@ -75,11 +98,11 @@ def make_star_points(cx, cy, r, inner_r, sides, rotation):
         points.append((cx + inner_r * math.cos(inner_angle), cy + inner_r * math.sin(inner_angle)))
     return points
 
-def make_cross_points(cx, cy, r, arm_width, num_arms):
+def make_cross_points(cx, cy, r, arm_width, num_arms, rotation_deg=0):
     arm = _shapely_box(-arm_width / 2, 0, arm_width / 2, r)
     arms = []
     for i in range(num_arms):
-        angle_deg = i * 360 / num_arms
+        angle_deg = rotation_deg + i * 360 / num_arms
         rotated = _shapely_rotate(arm, angle_deg, origin=(0, 0))
         rotated = _shapely_translate(rotated, cx, cy)
         arms.append(rotated)
@@ -123,7 +146,7 @@ def draw_polygon(dwg, p):
     cx, cy, r = random_geometry(p)
     stroke_width2=random.randint(p["stroke_width_min"],p["stroke_width_max"])
     sides = random.randint(p["sides_min"], p["sides_max"])
-    rotation = random.uniform(0, 2 * math.pi)
+    rotation = math.radians(random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 360)))
     points = make_polygon_points(cx, cy, r, sides, rotation)
     fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
     dwg.add(dwg.polygon(
@@ -142,7 +165,7 @@ def draw_star(dwg, p):
     cx, cy, r = random_geometry(p)
     inner_r = r * random.uniform(p["inner_r_ratio_min"], p["inner_r_ratio_max"])
     sides = random.randint(p["sides_min"], p["sides_max"])
-    rotation = random.uniform(0, 2 * math.pi)
+    rotation = math.radians(random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 360)))
     stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
     points = make_star_points(cx, cy, r, inner_r, sides, rotation)
     fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
@@ -162,7 +185,8 @@ def draw_cross(dwg, p):
     arm_width = random.randint(p["arm_width_min"], p["arm_width_max"])
     num_arms = random.randint(p["sides_min"], p["sides_max"])
     stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
-    points = make_cross_points(cx, cy, r, arm_width, num_arms)
+    rotation_deg = random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 360))
+    points = make_cross_points(cx, cy, r, arm_width, num_arms, rotation_deg)
     fill_color = "none" if p.get("fill_transparent") else random_color(p, "fill")
     dwg.add(dwg.polygon(
         points=points,
@@ -404,19 +428,31 @@ def _profile_to_geometry(p, cx, cy):
         petal_r = random.randint(p["petal_r_min"], p["petal_r_max"])
         length_ratio = random.uniform(p["petal_length_ratio_min"], p["petal_length_ratio_max"])
         point_inward = p.get("point_inward", True)
-        start_angle = random.uniform(0, 2 * math.pi)
+        rot_min = math.radians(p["rotation_min"]) if "rotation_min" in p else 0
+        rot_max = math.radians(p["rotation_max"]) if "rotation_max" in p else 2 * math.pi
+        start_angle = random.uniform(rot_min, rot_max)
         petal_local = _make_petal(petal_r, length_ratio)
         geoms = [_place_petal(petal_local, cx, cy, arm_r,
                               start_angle + 2*math.pi*i/count, point_inward)
                  for i in range(count)]
         geoms = [g for g in geoms if not g.is_empty]
         return _shapely_union(geoms) if geoms else _ShapelyPolygon()
+    elif shape == "line":
+        length = random.randint(p["length_min"], p["length_max"])
+        width = random.randint(p["width_min"], p["width_max"])
+        rotation_deg = random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 360))
+        squiggle_amp = random.uniform(p.get("squiggle_amp_min", 0), p.get("squiggle_amp_max", 0))
+        squiggle_freq = random.uniform(p.get("squiggle_freq_min", 1), p.get("squiggle_freq_max", 1))
+        margin = p.get("margin", 0)
+        return _make_line_geometry(cx, cy, length, width, rotation_deg, squiggle_amp, squiggle_freq, margin)
     return _ShapelyPolygon()
 
 def _constellation_geometry(p, cx, cy):
     radius = random.randint(p["radius_min"], p["radius_max"])
     count = random.randint(p["count_min"], p["count_max"])
-    start_angle = random.uniform(0, 2 * math.pi)
+    rot_min = math.radians(p["rotation_min"]) if "rotation_min" in p else 0
+    rot_max = math.radians(p["rotation_max"]) if "rotation_max" in p else 2 * math.pi
+    start_angle = random.uniform(rot_min, rot_max)
     weighted_subs = _build_weighted_subs(p["sub_profiles"])
     uniform_size = p.get("uniform_size", False)
     fixed_size = None
@@ -470,7 +506,9 @@ def draw_constellation(dwg, p):
     cy = random.randint(p["y_min"], p["y_max"])
     radius = random.randint(p["radius_min"], p["radius_max"])
     count = random.randint(p["count_min"], p["count_max"])
-    start_angle = random.uniform(0, 2 * math.pi)
+    rot_min = math.radians(p["rotation_min"]) if "rotation_min" in p else 0
+    rot_max = math.radians(p["rotation_max"]) if "rotation_max" in p else 2 * math.pi
+    start_angle = random.uniform(rot_min, rot_max)
     one_layer = p.get("one_layer", False)
     fill_transparent = bool(p.get("fill_transparent"))
     weighted_subs = _build_weighted_subs(p["sub_profiles"])
@@ -525,17 +563,40 @@ def draw_constellation(dwg, p):
         return results if results else None
 
 def draw_nest(dwg, p):
+    _nest_counter[0] += 1
+    nest_id = f"nest_{_nest_counter[0]}"
     cx = random.randint(p["x_min"], p["x_max"])
     cy = random.randint(p["y_min"], p["y_max"])
     uniform = p.get("uniform_adjustment", True)
     max_count = random.randint(p["count_min"], p["count_max"])
     sub_p_base = dict(random.choice(_build_weighted_subs(p["sub_profiles"])))
+    ring_rotation = p.get("ring_rotation", "random")  # "random", "none", "coordinated"
     results = []
+
+    def _tag(r, ring_index):
+        r["nest_group"] = nest_id
+        r["nest_ring_index"] = ring_index
+
+    def _apply_ring_rotation(sp, i, n):
+        """Set rotation on a sub-profile copy based on ring_rotation mode."""
+        if ring_rotation == "none":
+            sp["rotation_min"] = sp["rotation_max"] = 0
+        elif ring_rotation == "coordinated":
+            base = random.uniform(
+                p.get("rotation_base_min", 0), p.get("rotation_base_max", 360)
+            ) if i == 0 else _apply_ring_rotation._base
+            if i == 0:
+                _apply_ring_rotation._base = base
+            angle = (_apply_ring_rotation._base + i * (360 / n)) % 360
+            sp["rotation_min"] = sp["rotation_max"] = angle
+        # "random": leave sp rotation keys as-is (sub_profile controls it)
+
     if uniform:
         r_key = "radius_min" if "radius_min" in sub_p_base else "r_min"
         r_key_max = "radius_max" if "radius_max" in sub_p_base else "r_max"
         ring_width = random.randint(p["ring_width_min"], p["ring_width_max"])
         base_r = random.randint(sub_p_base[r_key], sub_p_base[r_key_max])
+        n_rings = max(1, base_r // ring_width) if ring_width > 0 else max_count
         for i in range(max_count):
             r = base_r - i * ring_width
             if r <= 0:
@@ -544,18 +605,32 @@ def draw_nest(dwg, p):
             sp[r_key] = sp[r_key_max] = r
             sp["x_min"] = sp["x_max"] = cx
             sp["y_min"] = sp["y_max"] = cy
+            _apply_ring_rotation(sp, i, n_rings)
             result = draw_shape(dwg, sp)
             if result is not None:
-                results.append(result) if not isinstance(result, list) else results.extend(result)
+                if isinstance(result, list):
+                    for item in result:
+                        _tag(item, i)
+                    results.extend(result)
+                else:
+                    _tag(result, i)
+                    results.append(result)
     else:
         scale = 1.0
-        for _ in range(max_count):
+        for i in range(max_count):
             scaled_p = _scale_profile(sub_p_base, scale)
             scaled_p["x_min"] = scaled_p["x_max"] = cx
             scaled_p["y_min"] = scaled_p["y_max"] = cy
+            _apply_ring_rotation(scaled_p, i, max_count)
             result = draw_shape(dwg, scaled_p)
             if result is not None:
-                results.append(result) if not isinstance(result, list) else results.extend(result)
+                if isinstance(result, list):
+                    for item in result:
+                        _tag(item, i)
+                    results.extend(result)
+                else:
+                    _tag(result, i)
+                    results.append(result)
             scale *= random.uniform(p["scale_factor_min"], p["scale_factor_max"])
     return results if results else None
 
@@ -700,6 +775,10 @@ def draw_bumped_polygon(dwg, p):
     stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
     fill_transparent = bool(p.get("fill_transparent"))
 
+    if bump_mode in ("alternate", "all_in", "random") and stroke_width > 0:
+        print(f"  NOTE: bumped_polygon bump_mode='{bump_mode}' stroke_width={stroke_width} "
+              f"bump_ratio={bump_ratio:.2f} — stroke artifacts possible on inward bumps.")
+
     geom = _make_bumped_polygon(cx, cy, r, sides, rotation, bump_mode, bump_ratio)
     if geom.is_empty:
         return None
@@ -724,7 +803,9 @@ def draw_daisy(dwg, p):
     one_layer = p.get("one_layer", False)
     fill_transparent = bool(p.get("fill_transparent"))
     stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
-    start_angle = random.uniform(0, 2 * math.pi)
+    rot_min = math.radians(p["rotation_min"]) if "rotation_min" in p else 0
+    rot_max = math.radians(p["rotation_max"]) if "rotation_max" in p else 2 * math.pi
+    start_angle = random.uniform(rot_min, rot_max)
     petal_local = _make_petal(petal_r, length_ratio)
 
     if one_layer:
@@ -765,6 +846,63 @@ def draw_daisy(dwg, p):
         return results if results else None
 
 
+def _make_line_geometry(cx, cy, length, width, rotation_deg, squiggle_amp, squiggle_freq, margin):
+    """Build a capsule or squiggly-line Shapely geometry centered at (cx, cy).
+    squiggle_amp=0 gives a straight capsule. squiggle_amp>0 adds a sine-wave
+    offset perpendicular to the line direction with the given number of cycles.
+    margin clips the result to the canvas inset by margin pixels.
+    """
+    rot_rad = math.radians(rotation_deg)
+    dx, dy = math.cos(rot_rad), math.sin(rot_rad)
+    nx, ny = -dy, dx  # perpendicular (left of travel direction)
+
+    # Resolution: enough points to capture squiggle detail
+    n_pts = max(4, int(length / 3))
+    if squiggle_amp > 0 and squiggle_freq > 0:
+        n_pts = max(n_pts, int(squiggle_freq * 20))
+
+    pts = []
+    for i in range(n_pts):
+        t = i / (n_pts - 1)
+        along = (t - 0.5) * length
+        perp = squiggle_amp * math.sin(squiggle_freq * t * 2 * math.pi) if squiggle_amp > 0 else 0
+        pts.append((cx + along * dx + perp * nx, cy + along * dy + perp * ny))
+
+    geom = _ShapelyLineString(pts).buffer(width / 2)  # cap_style round by default
+
+    if margin > 0:
+        clip = _shapely_box(margin, margin, CANVAS_SIZE[0] - margin, CANVAS_SIZE[1] - margin)
+        geom = geom.intersection(clip)
+
+    return geom
+
+
+def draw_line(dwg, p):
+    cx = random.randint(p["x_min"], p["x_max"])
+    cy = random.randint(p["y_min"], p["y_max"])
+    length = random.randint(p["length_min"], p["length_max"])
+    width = random.randint(p["width_min"], p["width_max"])
+    rotation_deg = random.uniform(p.get("rotation_min", 0), p.get("rotation_max", 360))
+    squiggle_amp = random.uniform(p.get("squiggle_amp_min", 0), p.get("squiggle_amp_max", 0))
+    squiggle_freq = random.uniform(p.get("squiggle_freq_min", 1), p.get("squiggle_freq_max", 1))
+    margin = p.get("margin", 0)
+    stroke_width = random.randint(p["stroke_width_min"], p["stroke_width_max"])
+    fill_transparent = bool(p.get("fill_transparent"))
+
+    geom = _make_line_geometry(cx, cy, length, width, rotation_deg, squiggle_amp, squiggle_freq, margin)
+    if geom.is_empty:
+        return None
+
+    contours = _add_contour_paths(dwg, geom, stroke_width, fill_transparent, p)
+    if not contours:
+        return None
+
+    result = {"type": "line", "cx": cx, "cy": cy, "contours": contours, "stroke_width": stroke_width}
+    if fill_transparent:
+        result["fill_transparent"] = True
+    return result
+
+
 def draw_shape(dwg, p):
     # routes to the right function based on p["shape"]
     if p["shape"] == "circle":
@@ -786,6 +924,8 @@ def draw_shape(dwg, p):
         return draw_bumped_polygon(dwg, p)
     elif p["shape"] == "daisy":
         return draw_daisy(dwg, p)
+    elif p["shape"] == "line":
+        return draw_line(dwg, p)
 
 
 def main():

@@ -1,0 +1,33 @@
+[
+  {
+    "weight": 1,
+    "shape": "nest",
+    "x_min": 200, "x_max": 600,
+    "y_min": 200, "y_max": 600,
+    "uniform_adjustment": true,
+    "ring_rotation": "coordinated",
+    "rotation_base_min": 0, "rotation_base_max": 360,
+    "count_min": 6, "count_max": 12,
+    "ring_width_min": 15, "ring_width_max": 30,
+    "sub_profiles": [
+      {
+        "weight": 1,
+        "shape": "bumped_polygon",
+        "x_min": 0, "x_max": 0,
+        "y_min": 0, "y_max": 0,
+        "r_min": 80, "r_max": 200,
+        "sides_min": 4, "sides_max": 7,
+        "rotation_min": 0, "rotation_max": 360,
+        "bump_mode": "all_out",
+        "bump_ratio_min": 0.2, "bump_ratio_max": 0.45,
+        "fill_r_min": 30, "fill_r_max": 220,
+        "fill_g_min": 30, "fill_g_max": 220,
+        "fill_b_min": 30, "fill_b_max": 220,
+        "stroke_r_min": 0, "stroke_r_max": 60,
+        "stroke_g_min": 0, "stroke_g_max": 60,
+        "stroke_b_min": 0, "stroke_b_max": 60,
+        "stroke_width_min": 0, "stroke_width_max": 0
+      }
+    ]
+  }
+]

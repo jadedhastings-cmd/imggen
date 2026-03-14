@@ -10,7 +10,7 @@ import cairosvg
 
 FILE_TO_PREP = "shapes1.json"
 APPELLATION = "laser"
-TAPER_PX = 2  # pixels shrunk per side per layer above the base
+TAPER_PX = 1  # pixels shrunk per side per layer above the base
 
 
 # --- Load input data ---
@@ -37,7 +37,7 @@ def to_shapely(shape):
         base_fill = Point(shape["cx"], shape["cy"]).buffer(shape["r"])
     elif shape["type"] in ("polygon", "star", "cross"):
         base_fill = Polygon(shape["points"])
-    elif shape["type"] in ("text", "constellation", "bumped_polygon", "daisy", "petal"):
+    elif shape["type"] in ("text", "constellation", "bumped_polygon", "daisy", "petal", "line"):
         polys = []
         for c in shape["contours"]:
             if len(c) >= 3:
@@ -118,7 +118,19 @@ def filter_visible(shapes, geometries, rings):
     return visible_indices, visible_areas
 
 
-def compute_ordering(visible_indices, visible_areas, geometries, rings):
+def build_nest_groups(shapes):
+    """Build a mapping of nest_group ID -> list of shape indices sorted outermost-first
+    (ascending nest_ring_index). Only includes shapes that have nest_group metadata.
+    """
+    raw = {}
+    for i, shape in enumerate(shapes):
+        gid = shape.get("nest_group")
+        if gid:
+            raw.setdefault(gid, []).append((shape.get("nest_ring_index", 0), i))
+    return {gid: [idx for _, idx in sorted(members)] for gid, members in raw.items()}
+
+
+def compute_ordering(visible_indices, visible_areas, geometries, rings, shapes=None, nest_groups=None):
     """Order visible shapes from outermost to innermost, smallest first.
 
     At each step:
@@ -128,13 +140,26 @@ def compute_ordering(visible_indices, visible_areas, geometries, rings):
     3. Among eligible shapes, place the one with the smallest visible area first
        (it will become the shallowest unassigned lord layer).
 
+    Nest groups are treated as atomic units: when any member of a nest group is
+    selected, all members of that group are placed immediately in outermost-first
+    order (ascending nest_ring_index) before the algorithm continues.
+
     Returns a list of shape indices ordered from deepest to shallowest,
     matching the order that build_layers expects (last in list = lord1 = shallowest).
     """
     def combined_geom(i):
         return geometries[i] if rings[i] is None else geometries[i].union(rings[i])
 
+    # Map shape index -> nest_group id (only for shapes with nest metadata)
+    shape_nest = {}
+    if shapes and nest_groups:
+        for i, shape in enumerate(shapes):
+            gid = shape.get("nest_group")
+            if gid and gid in nest_groups:
+                shape_nest[i] = gid
+
     remaining = list(visible_indices)
+    remaining_set = set(visible_indices)
     orders = []
 
     while remaining:
@@ -153,8 +178,19 @@ def compute_ordering(visible_indices, visible_areas, geometries, rings):
 
         # Place the eligible shape with the smallest visible area next (it goes shallowest)
         next_idx = min(eligible, key=lambda i: visible_areas[i])
-        orders.append(next_idx)
-        remaining.remove(next_idx)
+
+        # If this shape belongs to a nest group, place all group members outermost-first
+        gid = shape_nest.get(next_idx)
+        if gid and nest_groups:
+            group_members = [idx for idx in nest_groups[gid] if idx in remaining_set]
+            for idx in group_members:
+                orders.append(idx)
+                remaining_set.discard(idx)
+            remaining = [idx for idx in remaining if idx in remaining_set]
+        else:
+            orders.append(next_idx)
+            remaining.remove(next_idx)
+            remaining_set.discard(next_idx)
 
     # orders is currently shallowest-first; build_layers expects deepest-first
     orders.reverse()
@@ -314,7 +350,7 @@ def save_preview_png(shapes, canvas_size, filename, visible_indices, orders, out
                 stroke_width=sw,
             ))
             label_x, label_y = shape["cx"], shape["cy"]
-        elif shape["type"] in ("text", "constellation", "bumped_polygon", "daisy", "petal"):
+        elif shape["type"] in ("text", "constellation", "bumped_polygon", "daisy", "petal", "line"):
             path_d = " ".join(
                 f"M {pts[0][0]:.2f},{pts[0][1]:.2f} " +
                 " ".join(f"L {pt[0]:.2f},{pt[1]:.2f}" for pt in pts[1:]) + " Z"
@@ -376,7 +412,8 @@ def main():
 
     geometries, rings = build_geometries(shapes)
     visible_indices, visible_areas = filter_visible(shapes, geometries, rings)
-    orders = compute_ordering(visible_indices, visible_areas, geometries, rings)
+    nest_groups = build_nest_groups(shapes)
+    orders = compute_ordering(visible_indices, visible_areas, geometries, rings, shapes, nest_groups)
     layers = build_layers(orders, geometries, rings, canvas)
     layers = apply_taper(layers, canvas_size, args.taper)
 

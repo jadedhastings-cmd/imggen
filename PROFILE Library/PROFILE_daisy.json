@@ -1,0 +1,40 @@
+[
+  {
+    "weight": 1,
+    "shape": "daisy",
+    "one_layer": false,
+    "point_inward": true,
+    "x_min": 250, "x_max": 550,
+    "y_min": 250, "y_max": 550,
+    "radius_min": 10, "radius_max": 20,
+    "count_min": 5, "count_max": 9,
+    "petal_r_min": 20, "petal_r_max": 40,
+    "petal_length_ratio_min": 1.0, "petal_length_ratio_max": 1.0,
+    "fill_r_min": 0, "fill_r_max": 255,
+    "fill_g_min": 0, "fill_g_max": 255,
+    "fill_b_min": 0, "fill_b_max": 255,
+    "stroke_r_min": 0, "stroke_r_max": 255,
+    "stroke_g_min": 0, "stroke_g_max": 255,
+    "stroke_b_min": 0, "stroke_b_max": 255,
+    "stroke_width_min": 0, "stroke_width_max": 0
+  },
+  {
+    "weight": 0,
+    "shape": "daisy",
+    "one_layer": true,
+    "point_inward": true,
+    "x_min": 200, "x_max": 600,
+    "y_min": 200, "y_max": 600,
+    "radius_min": 30, "radius_max": 80,
+    "count_min": 6, "count_max": 14,
+    "petal_r_min": 25, "petal_r_max": 60,
+    "petal_length_ratio_min": 1.2, "petal_length_ratio_max": 3.0,
+    "fill_r_min": 50, "fill_r_max": 150,
+    "fill_g_min": 50, "fill_g_max": 200,
+    "fill_b_min": 150, "fill_b_max": 255,
+    "stroke_r_min": 0, "stroke_r_max": 60,
+    "stroke_g_min": 0, "stroke_g_max": 60,
+    "stroke_b_min": 0, "stroke_b_max": 60,
+    "stroke_width_min": 4, "stroke_width_max": 10
+  }
+]
